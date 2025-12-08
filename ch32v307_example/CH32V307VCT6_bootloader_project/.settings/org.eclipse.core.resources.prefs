@@ -1,0 +1,9 @@
+eclipse.preferences.version=1
+encoding//Components/boot_config.h=UTF-8
+encoding//Components/boot_port.h=UTF-8
+encoding//Components/boot_port_ch32v307.c=UTF-8
+encoding//Components/easy_bootloader.c=UTF-8
+encoding//Components/easy_bootloader.h=UTF-8
+encoding//Ld/Link.ld=UTF-8
+encoding//Myapp/myuart.c=UTF-8
+encoding//Myapp/scheduler.c=UTF-8
