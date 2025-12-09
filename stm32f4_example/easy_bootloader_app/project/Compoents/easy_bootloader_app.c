@@ -401,11 +401,7 @@ static boot_port_app_status_t app_write_flag_region(uint32_t flag, uint32_t vers
         return status;
     }
 
-    /* 写入 date */
-    buf[0] = (uint8_t)(date & 0xFFU);
-    buf[1] = (uint8_t)((date >> 8) & 0xFFU);
-    buf[2] = (uint8_t)((date >> 16) & 0xFFU);
-    buf[3] = (uint8_t)((date >> 24) & 0xFFU);
+
     /* 写入 date */
     buf[0] = (uint8_t)(date & 0xFFU);
     buf[1] = (uint8_t)((date >> 8) & 0xFFU);
