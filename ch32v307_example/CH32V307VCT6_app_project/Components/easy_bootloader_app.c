@@ -412,5 +412,4 @@ static boot_port_app_status_t app_write_flag_region(uint32_t flag, uint32_t vers
         return status;
     }
 
-    return boot_port_app_flash_write(BOOT_APP_DATE_ADDR, buf, 4U);
 }
