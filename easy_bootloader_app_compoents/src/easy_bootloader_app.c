@@ -410,5 +410,5 @@ static boot_port_app_status_t app_write_flag_region(uint32_t flag, uint32_t vers
     if (status != BOOT_PORT_APP_OK) {
         return status;
     }
-
+    return BOOT_PORT_APP_OK;
 }
