@@ -22,7 +22,7 @@
 /* 命令帧长度 */
 #define CMD_QUERY_VERSION_LEN     6U    // 55 AA FF DD 55 55
 #define CMD_QUERY_DATE_LEN        6U    // 55 AA FF CC 55 55
-#define CMD_START_FLASH_LEN       14U   // 55 AA [ver 4B] [date 4B] FF EE 55 55
+#define CMD_START_FLASH_LEN       6U    // 55 AA FF EE 55 55 (简化版，不携带版本/日期)
 
 /* 命令特征字节 */
 #define CMD_QUERY_VERSION_BYTE0   0xFFU
@@ -49,7 +49,7 @@ typedef enum {
 
 /* APP 上下文结构体 */
 typedef struct {
-    uint8_t  rx_cache[CMD_START_FLASH_LEN * 2];  // 线性解析缓存（最大命令长度的2倍）
+    uint8_t  rx_cache[CMD_QUERY_VERSION_LEN * 2];  // 线性解析缓存（最大命令长度的2倍）
     uint16_t rx_cache_len;
 
     uint32_t boot_flag;
@@ -65,11 +65,11 @@ static void app_reset_context(void);
 static void app_read_flag_region(void);
 static void app_poll_uart(void);
 static void app_consume_cache(uint16_t count);
-static bl_app_cmd_t app_check_dataframe(uint32_t *version, uint32_t *date);
+static bl_app_cmd_t app_check_dataframe(void);
 static void app_handle_query_version(void);
 static void app_handle_query_date(void);
-static void app_handle_start_flash(uint32_t new_version, uint32_t new_date);
-static boot_port_app_status_t app_write_flag_region(uint32_t flag, uint32_t version, uint32_t date);
+static void app_handle_start_flash(void);
+static boot_port_app_status_t app_write_flag_only(uint32_t flag);
 static void app_send_string(const char *str);
 static void app_uint_to_str(uint32_t value, char *buf, uint8_t width);
 
@@ -95,9 +95,7 @@ void easy_bootloader_app_run(void)
 
     app_poll_uart();
 
-    uint32_t new_version = 0U;
-    uint32_t new_date = 0U;
-    bl_app_cmd_t cmd = app_check_dataframe(&new_version, &new_date);
+    bl_app_cmd_t cmd = app_check_dataframe();
 
     switch (cmd) {
         case BL_APP_CMD_QUERY_VERSION:
@@ -109,7 +107,7 @@ void easy_bootloader_app_run(void)
             break;
 
         case BL_APP_CMD_START_FLASH:
-            app_handle_start_flash(new_version, new_date);
+            app_handle_start_flash();
             break;
 
         case BL_APP_CMD_NONE:
@@ -163,11 +161,9 @@ static void app_consume_cache(uint16_t count)
 
 /**
  * @brief 解析数据帧，识别命令类型
- * @param version 输出参数，触发升级命令时返回新版本号
- * @param date    输出参数，触发升级命令时返回新更新时间
  * @return 命令类型
  */
-static bl_app_cmd_t app_check_dataframe(uint32_t *version, uint32_t *date)
+static bl_app_cmd_t app_check_dataframe(void)
 {
     /* 最小帧长度检查 */
     if (g_app_ctx.rx_cache_len < CMD_QUERY_VERSION_LEN) {
@@ -183,46 +179,30 @@ static bl_app_cmd_t app_check_dataframe(uint32_t *version, uint32_t *date)
         }
 
         /* 检查查询版本命令: 55 AA FF DD 55 55 (6字节) */
-        if (g_app_ctx.rx_cache_len >= CMD_QUERY_VERSION_LEN) {
-            if (g_app_ctx.rx_cache[2] == CMD_QUERY_VERSION_BYTE0 &&
-                g_app_ctx.rx_cache[3] == CMD_QUERY_VERSION_BYTE1 &&
-                g_app_ctx.rx_cache[4] == BOOT_FRAME_TAIL0 &&
-                g_app_ctx.rx_cache[5] == BOOT_FRAME_TAIL1) {
-                app_consume_cache(CMD_QUERY_VERSION_LEN);
-                return BL_APP_CMD_QUERY_VERSION;
-            }
+        if (g_app_ctx.rx_cache[2] == CMD_QUERY_VERSION_BYTE0 &&
+            g_app_ctx.rx_cache[3] == CMD_QUERY_VERSION_BYTE1 &&
+            g_app_ctx.rx_cache[4] == BOOT_FRAME_TAIL0 &&
+            g_app_ctx.rx_cache[5] == BOOT_FRAME_TAIL1) {
+            app_consume_cache(CMD_QUERY_VERSION_LEN);
+            return BL_APP_CMD_QUERY_VERSION;
         }
 
         /* 检查查询更新时间命令: 55 AA FF CC 55 55 (6字节) */
-        if (g_app_ctx.rx_cache_len >= CMD_QUERY_DATE_LEN) {
-            if (g_app_ctx.rx_cache[2] == CMD_QUERY_DATE_BYTE0 &&
-                g_app_ctx.rx_cache[3] == CMD_QUERY_DATE_BYTE1 &&
-                g_app_ctx.rx_cache[4] == BOOT_FRAME_TAIL0 &&
-                g_app_ctx.rx_cache[5] == BOOT_FRAME_TAIL1) {
-                app_consume_cache(CMD_QUERY_DATE_LEN);
-                return BL_APP_CMD_QUERY_DATE;
-            }
+        if (g_app_ctx.rx_cache[2] == CMD_QUERY_DATE_BYTE0 &&
+            g_app_ctx.rx_cache[3] == CMD_QUERY_DATE_BYTE1 &&
+            g_app_ctx.rx_cache[4] == BOOT_FRAME_TAIL0 &&
+            g_app_ctx.rx_cache[5] == BOOT_FRAME_TAIL1) {
+            app_consume_cache(CMD_QUERY_DATE_LEN);
+            return BL_APP_CMD_QUERY_DATE;
         }
 
-        /* 检查触发升级命令: 55 AA [ver 4B] [date 4B] FF EE 55 55 (14字节) */
-        if (g_app_ctx.rx_cache_len >= CMD_START_FLASH_LEN) {
-            if (g_app_ctx.rx_cache[10] == CMD_START_FLASH_BYTE0 &&
-                g_app_ctx.rx_cache[11] == CMD_START_FLASH_BYTE1 &&
-                g_app_ctx.rx_cache[12] == BOOT_FRAME_TAIL0 &&
-                g_app_ctx.rx_cache[13] == BOOT_FRAME_TAIL1) {
-                /* 解析版本号 (大端序) */
-                *version = ((uint32_t)g_app_ctx.rx_cache[2] << 24) |
-                           ((uint32_t)g_app_ctx.rx_cache[3] << 16) |
-                           ((uint32_t)g_app_ctx.rx_cache[4] << 8)  |
-                           (uint32_t)g_app_ctx.rx_cache[5];
-                /* 解析更新时间 (大端序) */
-                *date = ((uint32_t)g_app_ctx.rx_cache[6] << 24) |
-                        ((uint32_t)g_app_ctx.rx_cache[7] << 16) |
-                        ((uint32_t)g_app_ctx.rx_cache[8] << 8)  |
-                        (uint32_t)g_app_ctx.rx_cache[9];
-                app_consume_cache(CMD_START_FLASH_LEN);
-                return BL_APP_CMD_START_FLASH;
-            }
+        /* 检查触发升级命令: 55 AA FF EE 55 55 (6字节，简化版) */
+        if (g_app_ctx.rx_cache[2] == CMD_START_FLASH_BYTE0 &&
+            g_app_ctx.rx_cache[3] == CMD_START_FLASH_BYTE1 &&
+            g_app_ctx.rx_cache[4] == BOOT_FRAME_TAIL0 &&
+            g_app_ctx.rx_cache[5] == BOOT_FRAME_TAIL1) {
+            app_consume_cache(CMD_START_FLASH_LEN);
+            return BL_APP_CMD_START_FLASH;
         }
 
         /* 帧头匹配但命令不匹配，跳过帧头继续查找 */
@@ -328,50 +308,41 @@ static void app_handle_query_date(void)
 
 /**
  * @brief 处理触发升级命令
- * @param new_version 新版本号
- * @param new_date    新更新时间
+ * @note  简化版：直接进入升级模式，不再比较版本号
+ *        版本信息由上位机在完成帧中携带，Bootloader 端写入
  */
-static void app_handle_start_flash(uint32_t new_version, uint32_t new_date)
+static void app_handle_start_flash(void)
 {
     BOOT_APP_LOG("Start flash command received\r\n");
-    BOOT_APP_LOG("New Version: 0x%08X, New Date: 0x%08X\r\n", new_version, new_date);
-
-    /* 比较版本号 */
-    if (new_version == g_app_ctx.app_version) {
-        BOOT_APP_LOG("Version is same, don't need to update\r\n");
-        return;
-    }
-
-    BOOT_APP_LOG("Version different, starting upgrade...\r\n");
+    BOOT_APP_LOG("Entering bootloader mode...\r\n");
 
     /* 发送 ACK 应答 */
     boot_port_app_uart_write(g_boot_ack, sizeof(g_boot_ack));
     BOOT_APP_LOG("ACK sent\r\n");
 
-    /* 写入新版本号、更新时间和标志位 */
-    boot_port_app_status_t status = app_write_flag_region(
-        BOOT_FLAG_BOOTLOADER,
-        new_version,
-        new_date);
+    /* 只写入 flag=1，不写版本号和日期 */
+    boot_port_app_status_t status = app_write_flag_only(BOOT_FLAG_BOOTLOADER);
     if (status != BOOT_PORT_APP_OK) {
-        BOOT_APP_LOG("Write flag region failed\r\n");
+        BOOT_APP_LOG("Write flag failed\r\n");
         return;
     }
 
     BOOT_APP_LOG("Flag set to BOOTLOADER, resetting...\r\n");
+
+    /* 短暂延时确保 ACK 和日志发送完成 */
+    for (volatile uint32_t i = 0; i < 100000; i++);
 
     /* 系统复位，进入 Bootloader 模式 */
     boot_port_app_system_reset();
 }
 
 /**
- * @brief 写入标志位区
- * @param flag    启动标志
- * @param version 版本号
- * @param date    更新时间
+ * @brief 只写入启动标志位
+ * @param flag 启动标志
  * @return 操作状态
+ * @note  不写入版本号和日期，保持原有值或擦除状态
  */
-static boot_port_app_status_t app_write_flag_region(uint32_t flag, uint32_t version, uint32_t date)
+static boot_port_app_status_t app_write_flag_only(uint32_t flag)
 {
     /* 先擦除标志位区 */
     boot_port_app_status_t status = boot_port_app_flash_erase(BOOT_APP_FLAG_REGION_ADDR, BOOT_APP_FLAG_REGION_SIZE);
@@ -380,41 +351,12 @@ static boot_port_app_status_t app_write_flag_region(uint32_t flag, uint32_t vers
         return status;
     }
 
-    /* 写入 flag */
+    /* 只写入 flag */
     uint8_t buf[4];
     buf[0] = (uint8_t)(flag & 0xFFU);
     buf[1] = (uint8_t)((flag >> 8) & 0xFFU);
     buf[2] = (uint8_t)((flag >> 16) & 0xFFU);
     buf[3] = (uint8_t)((flag >> 24) & 0xFFU);
-    status = boot_port_app_flash_write(BOOT_APP_FLAG_ADDR, buf, 4U);
-    if (status != BOOT_PORT_APP_OK) {
-        return status;
-    }
 
-    /* 写入 version */
-    buf[0] = (uint8_t)(version & 0xFFU);
-    buf[1] = (uint8_t)((version >> 8) & 0xFFU);
-    buf[2] = (uint8_t)((version >> 16) & 0xFFU);
-    buf[3] = (uint8_t)((version >> 24) & 0xFFU);
-    status = boot_port_app_flash_write(BOOT_APP_VERSION_ADDR, buf, 4U);
-    if (status != BOOT_PORT_APP_OK) {
-        return status;
-    }
-
-    /* 写入 date */
-    buf[0] = (uint8_t)(date & 0xFFU);
-    buf[1] = (uint8_t)((date >> 8) & 0xFFU);
-    buf[2] = (uint8_t)((date >> 16) & 0xFFU);
-    buf[3] = (uint8_t)((date >> 24) & 0xFFU);
-    /* 写入 date */
-    buf[0] = (uint8_t)(date & 0xFFU);
-    buf[1] = (uint8_t)((date >> 8) & 0xFFU);
-    buf[2] = (uint8_t)((date >> 16) & 0xFFU);
-    buf[3] = (uint8_t)((date >> 24) & 0xFFU);
-    status = boot_port_app_flash_write(BOOT_APP_DATE_ADDR, buf, 4U);
-    if (status != BOOT_PORT_APP_OK) {
-        return status;
-    }
-
-    return boot_port_app_flash_write(BOOT_APP_DATE_ADDR, buf, 4U);
+    return boot_port_app_flash_write(BOOT_APP_FLAG_ADDR, buf, 4U);
 }

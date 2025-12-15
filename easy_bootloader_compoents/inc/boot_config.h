@@ -67,9 +67,11 @@
 
 /*
  * 协议缓冲配置
+ * BOOT_PACKET_MAX_SIZE: 整帧最大长度（含帧头帧尾等固定开销 11 字节）
+ * 如上位机配置 1024 字节包大小，则此值需 >= 1024
  */
-#define BOOT_PACKET_MAX_SIZE          1013U
-#define BOOTLOADER_RINGBUFFER_SIZE    1013U
+#define BOOT_PACKET_MAX_SIZE          1024U
+#define BOOTLOADER_RINGBUFFER_SIZE    1024U
 #define BOOT_UART_TIMEOUT_MS          5000U
 
 

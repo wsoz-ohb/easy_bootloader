@@ -3,11 +3,11 @@
 <title>Static Call Graph - [project\project.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image project\project.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060528: Last Updated: Sat Dec 06 23:55:21 2025
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060528: Last Updated: Sat Dec 13 19:48:39 2025
 <BR><P>
-<H3>Maximum Stack Usage =        400 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
+<H3>Maximum Stack Usage =        416 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
-easy_bootloader_run &rArr; bootloader_handle_payload &rArr; bootloader_write_flag_region &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+easy_bootloader_run &rArr; bootloader_handle_finish_frame &rArr; bootloader_write_flag_region &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 <P>
 <H3>
 Mutually Recursive functions
@@ -133,7 +133,7 @@ Global Symbols
 <P><STRONG><a name="[5e]"></a>__main</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry.o(.ARM.Collect$$$$00000000))
 <BR>[Address Reference Count : 1]<UL><LI> startup_stm32f407xx.o(.text)
 </UL>
-<P><STRONG><a name="[e1]"></a>_main_stk</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry2.o(.ARM.Collect$$$$00000001))
+<P><STRONG><a name="[e4]"></a>_main_stk</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry2.o(.ARM.Collect$$$$00000001))
 
 <P><STRONG><a name="[66]"></a>_main_scatterload</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry5.o(.ARM.Collect$$$$00000004))
 <BR><BR>[Calls]<UL><LI><a href="#[67]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__scatterload
@@ -143,15 +143,15 @@ Global Symbols
 <BR><BR>[Called By]<UL><LI><a href="#[67]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__scatterload
 </UL>
 
-<P><STRONG><a name="[e2]"></a>_main_clock</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry7b.o(.ARM.Collect$$$$00000008))
+<P><STRONG><a name="[e5]"></a>_main_clock</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry7b.o(.ARM.Collect$$$$00000008))
 
-<P><STRONG><a name="[e3]"></a>_main_cpp_init</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry8b.o(.ARM.Collect$$$$0000000A))
+<P><STRONG><a name="[e6]"></a>_main_cpp_init</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry8b.o(.ARM.Collect$$$$0000000A))
 
-<P><STRONG><a name="[e4]"></a>_main_init</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry9a.o(.ARM.Collect$$$$0000000B))
+<P><STRONG><a name="[e7]"></a>_main_init</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry9a.o(.ARM.Collect$$$$0000000B))
 
-<P><STRONG><a name="[e5]"></a>__rt_final_cpp</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry10a.o(.ARM.Collect$$$$0000000D))
+<P><STRONG><a name="[e8]"></a>__rt_final_cpp</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry10a.o(.ARM.Collect$$$$0000000D))
 
-<P><STRONG><a name="[e6]"></a>__rt_final_exit</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry11a.o(.ARM.Collect$$$$0000000F))
+<P><STRONG><a name="[e9]"></a>__rt_final_exit</STRONG> (Thumb, 0 bytes, Stack size unknown bytes, entry11a.o(.ARM.Collect$$$$0000000F))
 
 <P><STRONG><a name="[1]"></a>Reset_Handler</STRONG> (Thumb, 8 bytes, Stack size 0 bytes, startup_stm32f407xx.o(.text))
 <BR>[Address Reference Count : 1]<UL><LI> startup_stm32f407xx.o(RESET)
@@ -403,22 +403,22 @@ Global Symbols
 <LI><a href="#[bc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_fp_digits
 </UL>
 
-<P><STRONG><a name="[e7]"></a>___aeabi_memcpy8$move</STRONG> (Thumb, 0 bytes, Stack size 8 bytes, memmovea.o(.text), UNUSED)
+<P><STRONG><a name="[ea]"></a>___aeabi_memcpy8$move</STRONG> (Thumb, 0 bytes, Stack size 8 bytes, memmovea.o(.text), UNUSED)
 
 <P><STRONG><a name="[c6]"></a>__aeabi_memcpy</STRONG> (Thumb, 64 bytes, Stack size 8 bytes, memmovea.o(.text))
 <BR><BR>[Stack]<UL><LI>Max Depth = 8<LI>Call Chain = __aeabi_memcpy
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_try_extract_frame
-<LI><a href="#[d3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_write
-<LI><a href="#[c5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_read
-<LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_put
+<BR>[Called By]<UL><LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_put
 <LI><a href="#[cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_get
+<LI><a href="#[db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_try_extract_frame
+<LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_write
+<LI><a href="#[c5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_read
 </UL>
 
-<P><STRONG><a name="[d7]"></a>__aeabi_memcpy4</STRONG> (Thumb, 0 bytes, Stack size 8 bytes, memmovea.o(.text))
+<P><STRONG><a name="[d9]"></a>__aeabi_memcpy4</STRONG> (Thumb, 0 bytes, Stack size 8 bytes, memmovea.o(.text))
 <BR><BR>[Stack]<UL><LI>Max Depth = 8<LI>Call Chain = __aeabi_memcpy4
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_flush
+<BR>[Called By]<UL><LI><a href="#[d7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_flush
 </UL>
 
 <P><STRONG><a name="[d0]"></a>__aeabi_memmove</STRONG> (Thumb, 0 bytes, Stack size 8 bytes, memmovea.o(.text))
@@ -427,19 +427,19 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_consume_cache
 </UL>
 
-<P><STRONG><a name="[e8]"></a>__aeabi_memmove4</STRONG> (Thumb, 0 bytes, Stack size 8 bytes, memmovea.o(.text), UNUSED)
+<P><STRONG><a name="[eb]"></a>__aeabi_memmove4</STRONG> (Thumb, 0 bytes, Stack size 8 bytes, memmovea.o(.text), UNUSED)
 
-<P><STRONG><a name="[e9]"></a>__aeabi_memmove8</STRONG> (Thumb, 0 bytes, Stack size 8 bytes, memmovea.o(.text), UNUSED)
+<P><STRONG><a name="[ec]"></a>__aeabi_memmove8</STRONG> (Thumb, 0 bytes, Stack size 8 bytes, memmovea.o(.text), UNUSED)
 
 <P><STRONG><a name="[6c]"></a>__aeabi_memset</STRONG> (Thumb, 14 bytes, Stack size 0 bytes, memseta.o(.text))
-<BR><BR>[Called By]<UL><LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_flush
-<LI><a href="#[6d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_memset$wrapper
+<BR><BR>[Called By]<UL><LI><a href="#[6d]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_memset$wrapper
 <LI><a href="#[6b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memclr
+<LI><a href="#[d7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_flush
 </UL>
 
-<P><STRONG><a name="[ea]"></a>__aeabi_memset4</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, memseta.o(.text), UNUSED)
+<P><STRONG><a name="[ed]"></a>__aeabi_memset4</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, memseta.o(.text), UNUSED)
 
-<P><STRONG><a name="[eb]"></a>__aeabi_memset8</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, memseta.o(.text), UNUSED)
+<P><STRONG><a name="[ee]"></a>__aeabi_memset8</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, memseta.o(.text), UNUSED)
 
 <P><STRONG><a name="[6b]"></a>__aeabi_memclr</STRONG> (Thumb, 4 bytes, Stack size 0 bytes, memseta.o(.text), UNUSED)
 <BR><BR>[Calls]<UL><LI><a href="#[6c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memset
@@ -448,17 +448,17 @@ Global Symbols
 <P><STRONG><a name="[ab]"></a>__aeabi_memclr4</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, memseta.o(.text))
 <BR><BR>[Called By]<UL><LI><a href="#[a7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_MspInit
 <LI><a href="#[b5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;SystemClock_Config
-<LI><a href="#[d9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
 <LI><a href="#[64]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;uart1_task
+<LI><a href="#[d8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_reset_context
 </UL>
 
-<P><STRONG><a name="[ec]"></a>__aeabi_memclr8</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, memseta.o(.text), UNUSED)
+<P><STRONG><a name="[ef]"></a>__aeabi_memclr8</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, memseta.o(.text), UNUSED)
 
 <P><STRONG><a name="[6d]"></a>_memset$wrapper</STRONG> (Thumb, 18 bytes, Stack size 8 bytes, memseta.o(.text), UNUSED)
 <BR><BR>[Calls]<UL><LI><a href="#[6c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memset
 </UL>
 
-<P><STRONG><a name="[ed]"></a>__aeabi_uidiv</STRONG> (Thumb, 0 bytes, Stack size 12 bytes, uidiv.o(.text), UNUSED)
+<P><STRONG><a name="[f0]"></a>__aeabi_uidiv</STRONG> (Thumb, 0 bytes, Stack size 12 bytes, uidiv.o(.text), UNUSED)
 
 <P><STRONG><a name="[c0]"></a>__aeabi_uidivmod</STRONG> (Thumb, 44 bytes, Stack size 12 bytes, uidiv.o(.text), UNUSED)
 <BR><BR>[Called By]<UL><LI><a href="#[bb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_printf_core
@@ -471,7 +471,7 @@ Global Symbols
 <LI><a href="#[68]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_uldivmod
 </UL>
 
-<P><STRONG><a name="[ee]"></a>_ll_shift_l</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, llshl.o(.text), UNUSED)
+<P><STRONG><a name="[f1]"></a>_ll_shift_l</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, llshl.o(.text), UNUSED)
 
 <P><STRONG><a name="[69]"></a>__aeabi_llsr</STRONG> (Thumb, 32 bytes, Stack size 0 bytes, llushr.o(.text))
 <BR><BR>[Called By]<UL><LI><a href="#[70]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_double_epilogue
@@ -479,9 +479,9 @@ Global Symbols
 <LI><a href="#[68]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_uldivmod
 </UL>
 
-<P><STRONG><a name="[ef]"></a>_ll_ushift_r</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, llushr.o(.text), UNUSED)
+<P><STRONG><a name="[f2]"></a>_ll_ushift_r</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, llushr.o(.text), UNUSED)
 
-<P><STRONG><a name="[f0]"></a>__I$use$fp</STRONG> (Thumb, 0 bytes, Stack size 48 bytes, iusefp.o(.text), UNUSED)
+<P><STRONG><a name="[f3]"></a>__I$use$fp</STRONG> (Thumb, 0 bytes, Stack size 48 bytes, iusefp.o(.text), UNUSED)
 
 <P><STRONG><a name="[6e]"></a>__aeabi_dadd</STRONG> (Thumb, 322 bytes, Stack size 48 bytes, dadd.o(.text), UNUSED)
 <BR><BR>[Calls]<UL><LI><a href="#[6f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_lasr
@@ -531,13 +531,13 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[66]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_main_scatterload
 </UL>
 
-<P><STRONG><a name="[f1]"></a>__scatterload_rt2</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, init.o(.text), UNUSED)
+<P><STRONG><a name="[f4]"></a>__scatterload_rt2</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, init.o(.text), UNUSED)
 
 <P><STRONG><a name="[6f]"></a>__aeabi_lasr</STRONG> (Thumb, 36 bytes, Stack size 0 bytes, llsshr.o(.text), UNUSED)
 <BR><BR>[Called By]<UL><LI><a href="#[6e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_dadd
 </UL>
 
-<P><STRONG><a name="[f2]"></a>_ll_sshift_r</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, llsshr.o(.text), UNUSED)
+<P><STRONG><a name="[f5]"></a>_ll_sshift_r</STRONG> (Thumb, 0 bytes, Stack size 0 bytes, llsshr.o(.text), UNUSED)
 
 <P><STRONG><a name="[71]"></a>_double_round</STRONG> (Thumb, 30 bytes, Stack size 8 bytes, depilogue.o(.text), UNUSED)
 <BR><BR>[Called By]<UL><LI><a href="#[70]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_double_epilogue
@@ -696,7 +696,7 @@ Global Symbols
 <P><STRONG><a name="[7a]"></a>HAL_GetTick</STRONG> (Thumb, 6 bytes, Stack size 0 bytes, stm32f4xx_hal.o(i.HAL_GetTick))
 <BR><BR>[Called By]<UL><LI><a href="#[b0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;UART_WaitOnFlagUntilTimeout
 <LI><a href="#[7f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_DMA_Init
-<LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_run
+<LI><a href="#[df]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_run
 <LI><a href="#[95]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_RCC_OscConfig
 <LI><a href="#[93]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_RCC_ClockConfig
 <LI><a href="#[79]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;FLASH_WaitForLastOperation
@@ -831,8 +831,8 @@ Global Symbols
 <LI><a href="#[9e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;UART_EndRxTransfer
 <LI><a href="#[7c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_DMA_Abort
 </UL>
-<BR>[Called By]<UL><LI><a href="#[c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_jump_to_app
-<LI><a href="#[98]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UARTEx_RxEventCallback
+<BR>[Called By]<UL><LI><a href="#[98]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UARTEx_RxEventCallback
+<LI><a href="#[c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_jump_to_app
 </UL>
 
 <P><STRONG><a name="[9f]"></a>HAL_UART_DeInit</STRONG> (Thumb, 52 bytes, Stack size 8 bytes, stm32f4xx_hal_uart.o(i.HAL_UART_DeInit))
@@ -912,9 +912,9 @@ Global Symbols
 <BR>[Calls]<UL><LI><a href="#[b0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;UART_WaitOnFlagUntilTimeout
 <LI><a href="#[7a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
 </UL>
-<BR>[Called By]<UL><LI><a href="#[cd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_uart_write
+<BR>[Called By]<UL><LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;uart_printf
+<LI><a href="#[cd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_uart_write
 <LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
-<LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;uart_printf
 </UL>
 
 <P><STRONG><a name="[a5]"></a>HAL_UART_TxCpltCallback</STRONG> (Thumb, 2 bytes, Stack size 0 bytes, stm32f4xx_hal_uart.o(i.HAL_UART_TxCpltCallback))
@@ -937,7 +937,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[5c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 
-<P><STRONG><a name="[da]"></a>MX_GPIO_Init</STRONG> (Thumb, 38 bytes, Stack size 8 bytes, gpio.o(i.MX_GPIO_Init))
+<P><STRONG><a name="[dd]"></a>MX_GPIO_Init</STRONG> (Thumb, 38 bytes, Stack size 8 bytes, gpio.o(i.MX_GPIO_Init))
 <BR><BR>[Stack]<UL><LI>Max Depth = 8<LI>Call Chain = MX_GPIO_Init
 </UL>
 <BR>[Called By]<UL><LI><a href="#[5c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
@@ -1034,24 +1034,24 @@ Global Symbols
 <BR><BR>[Calls]<UL><LI><a href="#[bb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_printf_core
 </UL>
 
-<P><STRONG><a name="[f3]"></a>__1vsnprintf</STRONG> (Thumb, 0 bytes, Stack size 24 bytes, printfa.o(i.__0vsnprintf), UNUSED)
+<P><STRONG><a name="[f6]"></a>__1vsnprintf</STRONG> (Thumb, 0 bytes, Stack size 24 bytes, printfa.o(i.__0vsnprintf), UNUSED)
 
-<P><STRONG><a name="[f4]"></a>__2vsnprintf</STRONG> (Thumb, 0 bytes, Stack size 24 bytes, printfa.o(i.__0vsnprintf), UNUSED)
+<P><STRONG><a name="[f7]"></a>__2vsnprintf</STRONG> (Thumb, 0 bytes, Stack size 24 bytes, printfa.o(i.__0vsnprintf), UNUSED)
 
-<P><STRONG><a name="[f5]"></a>__c89vsnprintf</STRONG> (Thumb, 0 bytes, Stack size 24 bytes, printfa.o(i.__0vsnprintf), UNUSED)
+<P><STRONG><a name="[f8]"></a>__c89vsnprintf</STRONG> (Thumb, 0 bytes, Stack size 24 bytes, printfa.o(i.__0vsnprintf), UNUSED)
 
 <P><STRONG><a name="[ca]"></a>vsnprintf</STRONG> (Thumb, 0 bytes, Stack size 24 bytes, printfa.o(i.__0vsnprintf))
 <BR><BR>[Stack]<UL><LI>Max Depth = 24<LI>Call Chain = vsnprintf
 </UL>
-<BR>[Called By]<UL><LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
-<LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;uart_printf
+<BR>[Called By]<UL><LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;uart_printf
+<LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
 </UL>
 
-<P><STRONG><a name="[f6]"></a>__scatterload_copy</STRONG> (Thumb, 14 bytes, Stack size unknown bytes, handlers.o(i.__scatterload_copy), UNUSED)
+<P><STRONG><a name="[f9]"></a>__scatterload_copy</STRONG> (Thumb, 14 bytes, Stack size unknown bytes, handlers.o(i.__scatterload_copy), UNUSED)
 
-<P><STRONG><a name="[f7]"></a>__scatterload_null</STRONG> (Thumb, 2 bytes, Stack size unknown bytes, handlers.o(i.__scatterload_null), UNUSED)
+<P><STRONG><a name="[fa]"></a>__scatterload_null</STRONG> (Thumb, 2 bytes, Stack size unknown bytes, handlers.o(i.__scatterload_null), UNUSED)
 
-<P><STRONG><a name="[f8]"></a>__scatterload_zeroinit</STRONG> (Thumb, 14 bytes, Stack size unknown bytes, handlers.o(i.__scatterload_zeroinit), UNUSED)
+<P><STRONG><a name="[fb]"></a>__scatterload_zeroinit</STRONG> (Thumb, 14 bytes, Stack size unknown bytes, handlers.o(i.__scatterload_zeroinit), UNUSED)
 
 <P><STRONG><a name="[c1]"></a>boot_port_flash_erase</STRONG> (Thumb, 112 bytes, Stack size 56 bytes, boot_port_stm32f407.o(i.boot_port_flash_erase))
 <BR><BR>[Stack]<UL><LI>Max Depth = 104<LI>Call Chain = boot_port_flash_erase &rArr; HAL_FLASHEx_Erase &rArr; FLASH_WaitForLastOperation
@@ -1061,8 +1061,8 @@ Global Symbols
 <LI><a href="#[c4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FLASH_Lock
 <LI><a href="#[c2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;get_sector_index
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_write_flag_region
-<LI><a href="#[d2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_prepare_download
+<BR>[Called By]<UL><LI><a href="#[d2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_write_flag_region
+<LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_prepare_download
 </UL>
 
 <P><STRONG><a name="[c5]"></a>boot_port_flash_read</STRONG> (Thumb, 16 bytes, Stack size 8 bytes, boot_port_stm32f407.o(i.boot_port_flash_read))
@@ -1070,7 +1070,7 @@ Global Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
+<BR>[Called By]<UL><LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
 </UL>
 
 <P><STRONG><a name="[c7]"></a>boot_port_flash_write</STRONG> (Thumb, 58 bytes, Stack size 24 bytes, boot_port_stm32f407.o(i.boot_port_flash_write))
@@ -1080,9 +1080,9 @@ Global Symbols
 <LI><a href="#[87]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FLASH_Program
 <LI><a href="#[c4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_FLASH_Lock
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_write_flag_region
-<LI><a href="#[d3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_write
-<LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_flush
+<BR>[Called By]<UL><LI><a href="#[d2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_write_flag_region
+<LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_write
+<LI><a href="#[d7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_flush
 </UL>
 
 <P><STRONG><a name="[c8]"></a>boot_port_jump_to_app</STRONG> (Thumb, 100 bytes, Stack size 0 bytes, boot_port_stm32f407.o(i.boot_port_jump_to_app))
@@ -1091,7 +1091,7 @@ Global Symbols
 <BR>[Calls]<UL><LI><a href="#[9f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_DeInit
 <LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_DMAStop
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
+<BR>[Called By]<UL><LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
 </UL>
 
 <P><STRONG><a name="[c9]"></a>boot_port_log</STRONG> (Thumb, 42 bytes, Stack size 280 bytes, boot_port_stm32f407.o(i.boot_port_log))
@@ -1100,16 +1100,17 @@ Global Symbols
 <BR>[Calls]<UL><LI><a href="#[af]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_Transmit
 <LI><a href="#[ca]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;vsnprintf
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_write_flag_region
-<LI><a href="#[d2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_prepare_download
-<LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<BR>[Called By]<UL><LI><a href="#[65]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_run
+<LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
+<LI><a href="#[d2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_write_flag_region
+<LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_prepare_download
+<LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_finish_frame
 <LI><a href="#[ce]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_check_app_valid
-<LI><a href="#[65]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_run
-<LI><a href="#[d9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
 </UL>
 
-<P><STRONG><a name="[d6]"></a>boot_port_system_reset</STRONG> (Thumb, 26 bytes, Stack size 0 bytes, boot_port_stm32f407.o(i.boot_port_system_reset))
-<BR><BR>[Called By]<UL><LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<P><STRONG><a name="[d3]"></a>boot_port_system_reset</STRONG> (Thumb, 26 bytes, Stack size 0 bytes, boot_port_stm32f407.o(i.boot_port_system_reset))
+<BR><BR>[Called By]<UL><LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_finish_frame
 </UL>
 
 <P><STRONG><a name="[cb]"></a>boot_port_uart_read</STRONG> (Thumb, 10 bytes, Stack size 0 bytes, boot_port_stm32f407.o(i.boot_port_uart_read))
@@ -1125,57 +1126,61 @@ Global Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[af]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UART_Transmit
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<BR>[Called By]<UL><LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_finish_frame
 </UL>
 
-<P><STRONG><a name="[d9]"></a>easy_bootloader_init</STRONG> (Thumb, 172 bytes, Stack size 16 bytes, easy_bootloader.o(i.easy_bootloader_init))
-<BR><BR>[Stack]<UL><LI>Max Depth = 368<LI>Call Chain = easy_bootloader_init &rArr; bootloader_check_app_valid &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+<P><STRONG><a name="[dc]"></a>easy_bootloader_init</STRONG> (Thumb, 152 bytes, Stack size 8 bytes, easy_bootloader.o(i.easy_bootloader_init))
+<BR><BR>[Stack]<UL><LI>Max Depth = 360<LI>Call Chain = easy_bootloader_init &rArr; bootloader_check_app_valid &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
-<BR>[Calls]<UL><LI><a href="#[ce]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_check_app_valid
+<BR>[Calls]<UL><LI><a href="#[d8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_reset_context
+<LI><a href="#[ce]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_check_app_valid
 <LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
 <LI><a href="#[c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_jump_to_app
 <LI><a href="#[c5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_read
-<LI><a href="#[ab]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memclr4
 </UL>
-<BR>[Called By]<UL><LI><a href="#[db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_init
+<BR>[Called By]<UL><LI><a href="#[de]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_init
 </UL>
 
-<P><STRONG><a name="[65]"></a>easy_bootloader_run</STRONG> (Thumb, 86 bytes, Stack size 16 bytes, easy_bootloader.o(i.easy_bootloader_run))
-<BR><BR>[Stack]<UL><LI>Max Depth = 400<LI>Call Chain = easy_bootloader_run &rArr; bootloader_handle_payload &rArr; bootloader_write_flag_region &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+<P><STRONG><a name="[65]"></a>easy_bootloader_run</STRONG> (Thumb, 130 bytes, Stack size 24 bytes, easy_bootloader.o(i.easy_bootloader_run))
+<BR><BR>[Stack]<UL><LI>Max Depth = 416<LI>Call Chain = easy_bootloader_run &rArr; bootloader_handle_finish_frame &rArr; bootloader_write_flag_region &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
-<BR>[Calls]<UL><LI><a href="#[d8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_try_extract_frame
-<LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<BR>[Calls]<UL><LI><a href="#[db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_try_extract_frame
+<LI><a href="#[da]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_try_extract_finish_frame
+<LI><a href="#[d8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_reset_context
+<LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_finish_frame
 <LI><a href="#[cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_uart_read
 <LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> scheduler.o(.data)
 </UL>
 <P><STRONG><a name="[5c]"></a>main</STRONG> (Thumb, 34 bytes, Stack size 0 bytes, main.o(i.main))
-<BR><BR>[Stack]<UL><LI>Max Depth = 376<LI>Call Chain = main &rArr; scheduler_init &rArr; easy_bootloader_init &rArr; bootloader_check_app_valid &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+<BR><BR>[Stack]<UL><LI>Max Depth = 368<LI>Call Chain = main &rArr; scheduler_init &rArr; easy_bootloader_init &rArr; bootloader_check_app_valid &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
-<BR>[Calls]<UL><LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_run
-<LI><a href="#[db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_init
+<BR>[Calls]<UL><LI><a href="#[df]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_run
+<LI><a href="#[de]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_init
 <LI><a href="#[b3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MX_USART2_UART_Init
 <LI><a href="#[b2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MX_USART1_UART_Init
-<LI><a href="#[da]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MX_GPIO_Init
+<LI><a href="#[dd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MX_GPIO_Init
 <LI><a href="#[b1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;MX_DMA_Init
 <LI><a href="#[8c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_Init
 <LI><a href="#[b5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;SystemClock_Config
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> entry9a.o(.ARM.Collect$$$$0000000B)
 </UL>
-<P><STRONG><a name="[dd]"></a>myusart_init</STRONG> (Thumb, 32 bytes, Stack size 8 bytes, myusart.o(i.myusart_init))
+<P><STRONG><a name="[e0]"></a>myusart_init</STRONG> (Thumb, 32 bytes, Stack size 8 bytes, myusart.o(i.myusart_init))
 <BR><BR>[Stack]<UL><LI>Max Depth = 16<LI>Call Chain = myusart_init &rArr; rt_ringbuffer_init
 </UL>
-<BR>[Calls]<UL><LI><a href="#[de]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_init
+<BR>[Calls]<UL><LI><a href="#[e1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_init
 </UL>
-<BR>[Called By]<UL><LI><a href="#[db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_init
+<BR>[Called By]<UL><LI><a href="#[de]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;scheduler_init
 </UL>
 
 <P><STRONG><a name="[9a]"></a>rt_ringbuffer_data_len</STRONG> (Thumb, 48 bytes, Stack size 4 bytes, ringbuffer.o(i.rt_ringbuffer_data_len))
 <BR><BR>[Stack]<UL><LI>Max Depth = 4<LI>Call Chain = rt_ringbuffer_data_len
 </UL>
-<BR>[Calls]<UL><LI><a href="#[df]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_status
+<BR>[Calls]<UL><LI><a href="#[e2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_status
 </UL>
 <BR>[Called By]<UL><LI><a href="#[9b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_put
 <LI><a href="#[cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_get
@@ -1189,14 +1194,14 @@ Global Symbols
 <BR>[Calls]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_data_len
 <LI><a href="#[c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
 </UL>
-<BR>[Called By]<UL><LI><a href="#[cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_uart_read
-<LI><a href="#[64]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;uart1_task
+<BR>[Called By]<UL><LI><a href="#[64]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;uart1_task
+<LI><a href="#[cb]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_uart_read
 </UL>
 
-<P><STRONG><a name="[de]"></a>rt_ringbuffer_init</STRONG> (Thumb, 48 bytes, Stack size 8 bytes, ringbuffer.o(i.rt_ringbuffer_init))
+<P><STRONG><a name="[e1]"></a>rt_ringbuffer_init</STRONG> (Thumb, 48 bytes, Stack size 8 bytes, ringbuffer.o(i.rt_ringbuffer_init))
 <BR><BR>[Stack]<UL><LI>Max Depth = 8<LI>Call Chain = rt_ringbuffer_init
 </UL>
-<BR>[Called By]<UL><LI><a href="#[dd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;myusart_init
+<BR>[Called By]<UL><LI><a href="#[e0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;myusart_init
 </UL>
 
 <P><STRONG><a name="[9b]"></a>rt_ringbuffer_put</STRONG> (Thumb, 120 bytes, Stack size 16 bytes, ringbuffer.o(i.rt_ringbuffer_put))
@@ -1208,26 +1213,26 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[98]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_UARTEx_RxEventCallback
 </UL>
 
-<P><STRONG><a name="[e0]"></a>rt_ringbuffer_reset</STRONG> (Thumb, 16 bytes, Stack size 8 bytes, ringbuffer.o(i.rt_ringbuffer_reset))
+<P><STRONG><a name="[e3]"></a>rt_ringbuffer_reset</STRONG> (Thumb, 16 bytes, Stack size 8 bytes, ringbuffer.o(i.rt_ringbuffer_reset))
 <BR><BR>[Stack]<UL><LI>Max Depth = 8<LI>Call Chain = rt_ringbuffer_reset
 </UL>
 <BR>[Called By]<UL><LI><a href="#[64]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;uart1_task
 </UL>
 
-<P><STRONG><a name="[df]"></a>rt_ringbuffer_status</STRONG> (Thumb, 32 bytes, Stack size 0 bytes, ringbuffer.o(i.rt_ringbuffer_status))
+<P><STRONG><a name="[e2]"></a>rt_ringbuffer_status</STRONG> (Thumb, 32 bytes, Stack size 0 bytes, ringbuffer.o(i.rt_ringbuffer_status))
 <BR><BR>[Called By]<UL><LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_data_len
 </UL>
 
-<P><STRONG><a name="[db]"></a>scheduler_init</STRONG> (Thumb, 20 bytes, Stack size 8 bytes, scheduler.o(i.scheduler_init))
-<BR><BR>[Stack]<UL><LI>Max Depth = 376<LI>Call Chain = scheduler_init &rArr; easy_bootloader_init &rArr; bootloader_check_app_valid &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+<P><STRONG><a name="[de]"></a>scheduler_init</STRONG> (Thumb, 20 bytes, Stack size 8 bytes, scheduler.o(i.scheduler_init))
+<BR><BR>[Stack]<UL><LI>Max Depth = 368<LI>Call Chain = scheduler_init &rArr; easy_bootloader_init &rArr; bootloader_check_app_valid &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
-<BR>[Calls]<UL><LI><a href="#[d9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
-<LI><a href="#[dd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;myusart_init
+<BR>[Calls]<UL><LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
+<LI><a href="#[e0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;myusart_init
 </UL>
 <BR>[Called By]<UL><LI><a href="#[5c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 
-<P><STRONG><a name="[dc]"></a>scheduler_run</STRONG> (Thumb, 56 bytes, Stack size 24 bytes, scheduler.o(i.scheduler_run))
+<P><STRONG><a name="[df]"></a>scheduler_run</STRONG> (Thumb, 56 bytes, Stack size 24 bytes, scheduler.o(i.scheduler_run))
 <BR><BR>[Stack]<UL><LI>Max Depth = 24<LI>Call Chain = scheduler_run
 </UL>
 <BR>[Calls]<UL><LI><a href="#[7a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GetTick
@@ -1238,7 +1243,7 @@ Global Symbols
 <P><STRONG><a name="[64]"></a>uart1_task</STRONG> (Thumb, 60 bytes, Stack size 8 bytes, myusart.o(i.uart1_task))
 <BR><BR>[Stack]<UL><LI>Max Depth = 352<LI>Call Chain = uart1_task &rArr; uart_printf &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
-<BR>[Calls]<UL><LI><a href="#[e0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_reset
+<BR>[Calls]<UL><LI><a href="#[e3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_reset
 <LI><a href="#[cc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_get
 <LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;rt_ringbuffer_data_len
 <LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;uart_printf
@@ -1394,7 +1399,7 @@ Local Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
+<BR>[Called By]<UL><LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
 </UL>
 
 <P><STRONG><a name="[cf]"></a>bootloader_consume_cache</STRONG> (Thumb, 40 bytes, Stack size 16 bytes, easy_bootloader.o(i.bootloader_consume_cache))
@@ -1402,68 +1407,95 @@ Local Symbols
 </UL>
 <BR>[Calls]<UL><LI><a href="#[d0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memmove
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_try_extract_frame
+<BR>[Called By]<UL><LI><a href="#[db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_try_extract_frame
+<LI><a href="#[da]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_try_extract_finish_frame
 </UL>
 
-<P><STRONG><a name="[d1]"></a>bootloader_handle_payload</STRONG> (Thumb, 160 bytes, Stack size 16 bytes, easy_bootloader.o(i.bootloader_handle_payload))
-<BR><BR>[Stack]<UL><LI>Max Depth = 384<LI>Call Chain = bootloader_handle_payload &rArr; bootloader_write_flag_region &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+<P><STRONG><a name="[d1]"></a>bootloader_handle_finish_frame</STRONG> (Thumb, 116 bytes, Stack size 24 bytes, easy_bootloader.o(i.bootloader_handle_finish_frame))
+<BR><BR>[Stack]<UL><LI>Max Depth = 392<LI>Call Chain = bootloader_handle_finish_frame &rArr; bootloader_write_flag_region &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
-<BR>[Calls]<UL><LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_write_flag_region
-<LI><a href="#[d3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_write
-<LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_flush
-<LI><a href="#[d2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_prepare_download
+<BR>[Calls]<UL><LI><a href="#[d2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_write_flag_region
 <LI><a href="#[cd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_uart_write
-<LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_system_reset
+<LI><a href="#[d3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_system_reset
 <LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
 </UL>
 <BR>[Called By]<UL><LI><a href="#[65]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_run
 </UL>
 
-<P><STRONG><a name="[d2]"></a>bootloader_prepare_download</STRONG> (Thumb, 70 bytes, Stack size 16 bytes, easy_bootloader.o(i.bootloader_prepare_download))
+<P><STRONG><a name="[d4]"></a>bootloader_handle_payload</STRONG> (Thumb, 122 bytes, Stack size 16 bytes, easy_bootloader.o(i.bootloader_handle_payload))
+<BR><BR>[Stack]<UL><LI>Max Depth = 368<LI>Call Chain = bootloader_handle_payload &rArr; bootloader_prepare_download &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
+</UL>
+<BR>[Calls]<UL><LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_write
+<LI><a href="#[d7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_stream_flush
+<LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_prepare_download
+<LI><a href="#[cd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_uart_write
+<LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
+</UL>
+<BR>[Called By]<UL><LI><a href="#[65]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_run
+</UL>
+
+<P><STRONG><a name="[d5]"></a>bootloader_prepare_download</STRONG> (Thumb, 70 bytes, Stack size 16 bytes, easy_bootloader.o(i.bootloader_prepare_download))
 <BR><BR>[Stack]<UL><LI>Max Depth = 352<LI>Call Chain = bootloader_prepare_download &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
 <LI><a href="#[c1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_erase
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<BR>[Called By]<UL><LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
 </UL>
 
-<P><STRONG><a name="[d4]"></a>bootloader_stream_flush</STRONG> (Thumb, 76 bytes, Stack size 16 bytes, easy_bootloader.o(i.bootloader_stream_flush))
+<P><STRONG><a name="[d8]"></a>bootloader_reset_context</STRONG> (Thumb, 34 bytes, Stack size 16 bytes, easy_bootloader.o(i.bootloader_reset_context))
+<BR><BR>[Stack]<UL><LI>Max Depth = 16<LI>Call Chain = bootloader_reset_context
+</UL>
+<BR>[Calls]<UL><LI><a href="#[ab]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memclr4
+</UL>
+<BR>[Called By]<UL><LI><a href="#[65]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_run
+<LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_init
+</UL>
+
+<P><STRONG><a name="[d7]"></a>bootloader_stream_flush</STRONG> (Thumb, 76 bytes, Stack size 16 bytes, easy_bootloader.o(i.bootloader_stream_flush))
 <BR><BR>[Stack]<UL><LI>Max Depth = 88<LI>Call Chain = bootloader_stream_flush &rArr; boot_port_flash_write &rArr; HAL_FLASH_Program &rArr; FLASH_WaitForLastOperation
 </UL>
-<BR>[Calls]<UL><LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_write
-<LI><a href="#[6c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memset
-<LI><a href="#[d7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy4
+<BR>[Calls]<UL><LI><a href="#[6c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memset
+<LI><a href="#[d9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy4
+<LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_write
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<BR>[Called By]<UL><LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
 </UL>
 
-<P><STRONG><a name="[d3]"></a>bootloader_stream_write</STRONG> (Thumb, 166 bytes, Stack size 32 bytes, easy_bootloader.o(i.bootloader_stream_write))
+<P><STRONG><a name="[d6]"></a>bootloader_stream_write</STRONG> (Thumb, 166 bytes, Stack size 32 bytes, easy_bootloader.o(i.bootloader_stream_write))
 <BR><BR>[Stack]<UL><LI>Max Depth = 104<LI>Call Chain = bootloader_stream_write &rArr; boot_port_flash_write &rArr; HAL_FLASH_Program &rArr; FLASH_WaitForLastOperation
 </UL>
-<BR>[Calls]<UL><LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_write
-<LI><a href="#[c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<BR>[Calls]<UL><LI><a href="#[c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_write
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<BR>[Called By]<UL><LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
 </UL>
 
-<P><STRONG><a name="[d8]"></a>bootloader_try_extract_frame</STRONG> (Thumb, 184 bytes, Stack size 32 bytes, easy_bootloader.o(i.bootloader_try_extract_frame))
-<BR><BR>[Stack]<UL><LI>Max Depth = 56<LI>Call Chain = bootloader_try_extract_frame &rArr; bootloader_consume_cache &rArr; __aeabi_memmove
+<P><STRONG><a name="[da]"></a>bootloader_try_extract_finish_frame</STRONG> (Thumb, 114 bytes, Stack size 16 bytes, easy_bootloader.o(i.bootloader_try_extract_finish_frame))
+<BR><BR>[Stack]<UL><LI>Max Depth = 40<LI>Call Chain = bootloader_try_extract_finish_frame &rArr; bootloader_consume_cache &rArr; __aeabi_memmove
 </UL>
 <BR>[Calls]<UL><LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_consume_cache
-<LI><a href="#[c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
 </UL>
 <BR>[Called By]<UL><LI><a href="#[65]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_run
 </UL>
 
-<P><STRONG><a name="[d5]"></a>bootloader_write_flag_region</STRONG> (Thumb, 150 bytes, Stack size 32 bytes, easy_bootloader.o(i.bootloader_write_flag_region))
+<P><STRONG><a name="[db]"></a>bootloader_try_extract_frame</STRONG> (Thumb, 186 bytes, Stack size 32 bytes, easy_bootloader.o(i.bootloader_try_extract_frame))
+<BR><BR>[Stack]<UL><LI>Max Depth = 56<LI>Call Chain = bootloader_try_extract_frame &rArr; bootloader_consume_cache &rArr; __aeabi_memmove
+</UL>
+<BR>[Calls]<UL><LI><a href="#[c6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__aeabi_memcpy
+<LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_consume_cache
+</UL>
+<BR>[Called By]<UL><LI><a href="#[65]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;easy_bootloader_run
+</UL>
+
+<P><STRONG><a name="[d2]"></a>bootloader_write_flag_region</STRONG> (Thumb, 150 bytes, Stack size 32 bytes, easy_bootloader.o(i.bootloader_write_flag_region))
 <BR><BR>[Stack]<UL><LI>Max Depth = 368<LI>Call Chain = bootloader_write_flag_region &rArr; boot_port_log &rArr; HAL_UART_Transmit &rArr; UART_WaitOnFlagUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_log
 <LI><a href="#[c7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_write
 <LI><a href="#[c1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;boot_port_flash_erase
 </UL>
-<BR>[Called By]<UL><LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_payload
+<BR>[Called By]<UL><LI><a href="#[d1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;bootloader_handle_finish_frame
 </UL>
 
 <P><STRONG><a name="[bc]"></a>_fp_digits</STRONG> (Thumb, 366 bytes, Stack size 64 bytes, printfa.o(i._fp_digits), UNUSED)

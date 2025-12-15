@@ -58,7 +58,7 @@ void uart1_task(void)
 	if(data_size>0)	
 	{
 		rt_ringbuffer_get(&uart1_ringbuffer_struct,uart1_read_buffer,data_size);
-		uart_printf(&huart1,"data1:%s\r\n",uart1_read_buffer);	//打印接收到的数据
+		uart_printf(&huart1,"data2:%s\r\n",uart1_read_buffer);	//打印接收到的数据
 		rt_ringbuffer_reset(&uart1_ringbuffer_struct);
     memset(uart1_read_buffer,0,data_size);  
 		

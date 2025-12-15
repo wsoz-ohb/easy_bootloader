@@ -17,10 +17,22 @@
 #define BOOT_FRAME_TAIL1          0x55U
 #define BOOT_FRAME_FIXED_SIZE     11U    // 2B 头 + 3B 剩余 + 2B 长度 + 2B 校验 + 2B 尾
 
+/* 完成帧命令码 */
+#define BOOT_FINISH_FRAME_BYTE0   0xFFU
+#define BOOT_FINISH_FRAME_BYTE1   0xFDU
+#define BOOT_FINISH_FRAME_LEN     14U    // 55 AA [ver 4B] [date 4B] FF FD 55 55
+
 static const uint8_t g_boot_ack[] = {0x55U, 0xAAU, 0xFFU, 0xFEU, 0x55U, 0x55U}; //ACK帧
 
 // 纯数据部分最大长度 = 整帧最大长度 - 固定部分长度
 #define BOOT_PAYLOAD_MAX_SIZE     (BOOT_PACKET_MAX_SIZE - BOOT_FRAME_FIXED_SIZE)
+
+/* Bootloader 状态枚举 */
+typedef enum {
+    BOOT_STATE_IDLE,          // 空闲，等待数据帧
+    BOOT_STATE_RECEIVING,     // 正在接收固件数据
+    BOOT_STATE_WAIT_FINISH,   // 数据接收完成，等待完成帧
+} boot_state_t;
 
 typedef struct {
     uint8_t  rx_cache[BOOT_PACKET_MAX_SIZE];   // 线性解析缓存（整帧最大长度）
@@ -35,6 +47,7 @@ typedef struct {
     uint32_t app_version;
     uint32_t update_date;
 
+    boot_state_t state;                 // 当前状态
     bool download_active;
     bool initialized;
 } bootloader_context_t;
@@ -47,10 +60,13 @@ static bool bootloader_check_app_valid(void);
 static void bootloader_poll_uart(void);
 static void bootloader_consume_cache(uint16_t count);
 static bool bootloader_try_extract_frame(uint32_t *remaining, uint16_t *payload_len);
+static bool bootloader_try_extract_finish_frame(uint32_t *version, uint32_t *date);
 static boot_port_status_t bootloader_handle_payload(uint32_t remaining, uint16_t payload_len);
+static boot_port_status_t bootloader_handle_finish_frame(uint32_t version, uint32_t date);
 static boot_port_status_t bootloader_prepare_download(void);
 static boot_port_status_t bootloader_stream_write(const uint8_t *data, uint32_t len);
 static boot_port_status_t bootloader_stream_flush(void);
+static boot_port_status_t bootloader_write_flag_region(uint32_t flag, uint32_t version, uint32_t date);
 
 void easy_bootloader_init(void)
 {
@@ -193,11 +209,27 @@ void easy_bootloader_run(void)
 
     bootloader_poll_uart();
 
+    /* 如果处于等待完成帧状态，优先检测完成帧 */
+    if (g_boot_ctx.state == BOOT_STATE_WAIT_FINISH) {
+        uint32_t version = 0U;
+        uint32_t date = 0U;
+        if (bootloader_try_extract_finish_frame(&version, &date)) {
+            if (bootloader_handle_finish_frame(version, date) != BOOT_PORT_OK) {
+                /* 完成帧处理失败，重置状态允许重新刷写 */
+                BOOT_LOG("Finish frame handling failed, resetting state\r\n");
+                bootloader_reset_context();
+            }
+        }
+        return;
+    }
+
+    /* 正常状态下处理数据帧 */
     uint32_t remaining = 0U;
     uint16_t payload_len = 0U;
     while (bootloader_try_extract_frame(&remaining, &payload_len)) {
         if (bootloader_handle_payload(remaining, payload_len) != BOOT_PORT_OK) {
-            BOOT_LOG("bootloader handle payload failed\r\n");
+            BOOT_LOG("bootloader handle payload failed, resetting state\r\n");
+            bootloader_reset_context();
             break;
         }
     }
@@ -205,8 +237,11 @@ void easy_bootloader_run(void)
 
 static void bootloader_reset_context(void)
 {
+    bool was_initialized = g_boot_ctx.initialized;
     memset(&g_boot_ctx, 0, sizeof(g_boot_ctx));
     g_boot_ctx.current_addr = BOOT_APP_START_ADDR;
+    g_boot_ctx.state = BOOT_STATE_IDLE;
+    g_boot_ctx.initialized = was_initialized;  // 保留初始化标志
 }
 
 static void bootloader_poll_uart(void)
@@ -348,6 +383,9 @@ static boot_port_status_t bootloader_handle_payload(uint32_t remaining, uint16_t
         return status;
     }
 
+    /* 更新状态为接收中 */
+    g_boot_ctx.state = BOOT_STATE_RECEIVING;
+
     uint32_t future_bytes = g_boot_ctx.stream_cache_len + payload_len;
     uint32_t worst_case = (future_bytes + 3U) & ~0x3U;  //向上取整到 4 的倍数
     if ((g_boot_ctx.current_addr + worst_case) >
@@ -362,36 +400,20 @@ static boot_port_status_t bootloader_handle_payload(uint32_t remaining, uint16_t
     }
 
     if (remaining == 0U) {
+        /* 最后一帧：flush 数据，进入等待完成帧状态 */
         status = bootloader_stream_flush();
         if (status == BOOT_PORT_OK) {
             g_boot_ctx.download_active = false;
-            BOOT_LOG("Download complete, total %lu bytes\r\n",
+            g_boot_ctx.state = BOOT_STATE_WAIT_FINISH;
+            BOOT_LOG("Data complete, total %lu bytes\r\n",
                           (unsigned long)(g_boot_ctx.current_addr - BOOT_APP_START_ADDR));
-
-            status = bootloader_write_flag_region(BOOT_FLAG_APP,
-                                                   g_boot_ctx.app_version,
-                                                   g_boot_ctx.update_date);
-            if (status == BOOT_PORT_OK) {
-                BOOT_LOG("Flag set to APP (ver=0x%08X, date=0x%08X)\r\n",
-                              g_boot_ctx.app_version, g_boot_ctx.update_date);
-
-                // 先发送 ACK，再复位
-                boot_port_uart_write(g_boot_ack, sizeof(g_boot_ack));
-                //BOOT_LOG("ACK sent\r\n");
-
-                BOOT_LOG("Resetting system to run APP...\r\n");
-
-                boot_port_system_reset();  // 软复位，复位后根据 Flag 自动跳 APP
-            } else {
-                BOOT_LOG("Failed to write flag region\r\n");
-            }
+            BOOT_LOG("Waiting for finish frame...\r\n");
         }
-        return status;
     }
 
+    /* 无论是否最后一帧，都发送 ACK */
     if (status == BOOT_PORT_OK) {
         boot_port_uart_write(g_boot_ack, sizeof(g_boot_ack));
-        //BOOT_LOG("ACK sent\r\n");
     }
 
     return status;
@@ -478,4 +500,95 @@ static boot_port_status_t bootloader_stream_flush(void)
         g_boot_ctx.stream_cache_len = 0U;
     }
     return status;
+}
+
+/**
+ * @brief 尝试从缓存中提取完成帧
+ * @param version 输出参数，版本号
+ * @param date    输出参数，日期
+ * @return true=成功提取完成帧, false=数据不完整或格式错误
+ * @note  完成帧格式: 55 AA [ver 4B] [date 4B] FF FD 55 55 (14字节)
+ */
+static bool bootloader_try_extract_finish_frame(uint32_t *version, uint32_t *date)
+{
+    if (g_boot_ctx.rx_cache_len < BOOT_FINISH_FRAME_LEN) {
+        return false;
+    }
+
+    /* 查找帧头 */
+    while (g_boot_ctx.rx_cache_len >= BOOT_FINISH_FRAME_LEN) {
+        if (g_boot_ctx.rx_cache[0] != BOOT_FRAME_HEADER0 ||
+            g_boot_ctx.rx_cache[1] != BOOT_FRAME_HEADER1) {
+            bootloader_consume_cache(1U);
+            continue;
+        }
+
+        /* 检查完成帧格式: 55 AA [ver 4B] [date 4B] FF FD 55 55 */
+        if (g_boot_ctx.rx_cache[10] == BOOT_FINISH_FRAME_BYTE0 &&
+            g_boot_ctx.rx_cache[11] == BOOT_FINISH_FRAME_BYTE1 &&
+            g_boot_ctx.rx_cache[12] == BOOT_FRAME_TAIL0 &&
+            g_boot_ctx.rx_cache[13] == BOOT_FRAME_TAIL1) {
+
+            /* 解析版本号 (大端序) */
+            *version = ((uint32_t)g_boot_ctx.rx_cache[2] << 24) |
+                       ((uint32_t)g_boot_ctx.rx_cache[3] << 16) |
+                       ((uint32_t)g_boot_ctx.rx_cache[4] << 8)  |
+                       (uint32_t)g_boot_ctx.rx_cache[5];
+
+            /* 解析日期 (大端序) */
+            *date = ((uint32_t)g_boot_ctx.rx_cache[6] << 24) |
+                    ((uint32_t)g_boot_ctx.rx_cache[7] << 16) |
+                    ((uint32_t)g_boot_ctx.rx_cache[8] << 8)  |
+                    (uint32_t)g_boot_ctx.rx_cache[9];
+
+            bootloader_consume_cache(BOOT_FINISH_FRAME_LEN);
+            return true;
+        }
+
+        /* 帧头匹配但格式不对，跳过继续查找 */
+        bootloader_consume_cache(2U);
+    }
+
+    return false;
+}
+
+/**
+ * @brief 处理完成帧
+ * @param version 版本号
+ * @param date    日期
+ * @return 操作状态
+ * @note  写入版本号、日期、flag=2，然后发送 ACK 并复位
+ */
+static boot_port_status_t bootloader_handle_finish_frame(uint32_t version, uint32_t date)
+{
+    BOOT_LOG("Finish frame received: ver=0x%08X, date=0x%08X\r\n", version, date);
+
+    /* 检查状态 */
+    if (g_boot_ctx.state != BOOT_STATE_WAIT_FINISH) {
+        BOOT_LOG("Unexpected finish frame (state=%d)\r\n", g_boot_ctx.state);
+        return BOOT_PORT_ERROR;
+    }
+
+    /* 写入标志位区：flag=2 + 版本号 + 日期 */
+    boot_port_status_t status = bootloader_write_flag_region(BOOT_FLAG_APP, version, date);
+    if (status != BOOT_PORT_OK) {
+        BOOT_LOG("Failed to write flag region\r\n");
+        return status;
+    }
+
+    BOOT_LOG("Flag region updated: flag=APP, ver=0x%08X, date=0x%08X\r\n", version, date);
+
+    /* 发送 ACK */
+    boot_port_uart_write(g_boot_ack, sizeof(g_boot_ack));
+    BOOT_LOG("ACK sent\r\n");
+
+    /* 短暂延时确保 ACK 发送完成 */
+    for (volatile uint32_t i = 0; i < 100000; i++);
+
+    BOOT_LOG("Upgrade complete! Resetting to run APP...\r\n");
+
+    /* 系统复位，复位后根据 flag=2 自动跳转到 APP */
+    boot_port_system_reset();
+
+    return BOOT_PORT_OK;
 }

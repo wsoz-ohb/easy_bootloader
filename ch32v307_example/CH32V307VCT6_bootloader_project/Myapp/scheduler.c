@@ -27,7 +27,7 @@ void scheduler_init(void)
     task_num = sizeof(scheduler_task) / sizeof(task_t);
     mytim6_init();
     myuart2_init();
-    __enable_irq();  // 确保全局中断打开，UART/定时器中断才能驱动调度
+    __enable_irq();
     easy_bootloader_init();
 
 }
