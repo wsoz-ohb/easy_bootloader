@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "easy_bootloader.h": "c",
+        "boot_port.h": "c",
+        "boot_config.h": "c"
+    }
+}
