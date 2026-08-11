@@ -1,0 +1,32 @@
+# Python local environment and caches
+/.venv/
+**/__pycache__/
+*.py[cod]
+
+# Machine-local editor and assistant settings
+/.vscode/
+/.claude/
+
+# Keil build products and per-user UI state
+**/MDK-ARM/project/
+**/MDK-ARM/*.uvguix.*
+
+# EIDE downloaded caches, logs, and build products
+**/EIDE/.cmsis/
+**/EIDE/.eide/log/
+**/EIDE/.eide.usr.ctx.json
+**/EIDE/build/
+**/EIDE/bin/
+**/EIDE/obj/
+**/EIDE/out/
+
+# MounRiver/WCH build products
+**/obj/
+
+# Common temporary files
+*.bak
+*.tmp
+*.user
+*~
+.DS_Store
+Thumbs.db
