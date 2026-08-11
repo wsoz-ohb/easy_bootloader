@@ -10,5 +10,6 @@
 #include "myusart.h"
 #include "scheduler.h"
 #include "easy_bootloader_app.h"
+#include "ota_flash.h"
 
 #endif

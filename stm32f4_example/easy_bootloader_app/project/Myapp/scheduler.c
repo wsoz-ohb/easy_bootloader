@@ -18,7 +18,7 @@ typedef struct {
 static task_t scheduler_task[] =
 {
 	{uart1_task,100,0},
-	{easy_bootloader_app_run,10,0},
+	{uart2_task,10,0},
 };
 
 /**

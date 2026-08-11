@@ -23,6 +23,7 @@ virtualFolder:
                 - path: ../Core/Src/main.c
                 - path: ../Core/Src/gpio.c
                 - path: ../Core/Src/dma.c
+                - path: ../Core/Src/spi.c
                 - path: ../Core/Src/usart.c
                 - path: ../Core/Src/stm32f4xx_it.c
                 - path: ../Core/Src/stm32f4xx_hal_msp.c
@@ -32,9 +33,7 @@ virtualFolder:
       folders:
         - name: STM32F4xx_HAL_Driver
           files:
-            - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c
-            - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c
-            - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c
+            - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_spi.c
             - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c
             - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.c
             - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash.c
@@ -48,6 +47,9 @@ virtualFolder:
             - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c
             - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c
             - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_exti.c
+            - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c
+            - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c
+            - path: ../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c
           folders: []
         - name: CMSIS
           files:
@@ -60,16 +62,19 @@ virtualFolder:
         - path: ../Myapp/myusart.h
         - path: ../Myapp/scheduler.c
         - path: ../Myapp/scheduler.h
+        - path: ../Myapp/ota_flash.c
+        - path: ../Myapp/ota_flash.h
       folders: []
     - name: Compoents
       files:
         - path: ../Compoents/ringbuffer.c
         - path: ../Compoents/ringbuffer.h
         - path: ../Compoents/boot_config.h
-        - path: ../Compoents/boot_port.h
         - path: ../Compoents/boot_port_stm32f407.c
         - path: ../Compoents/easy_bootloader.c
         - path: ../Compoents/easy_bootloader.h
+        - path: ../Compoents/W25QXX_driver.c
+        - path: ../Compoents/W25QXX_driver.h
       folders: []
     - name: ::CMSIS
       files: []

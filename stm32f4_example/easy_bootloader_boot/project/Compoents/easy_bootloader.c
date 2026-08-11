@@ -20,7 +20,6 @@
 #define BOOT_FRAME_HEADER1        0xAAU
 #define BOOT_FRAME_TAIL0          0x55U
 #define BOOT_FRAME_TAIL1          0x55U
-#define BOOT_FRAME_FIXED_SIZE     11U    // 2B 头 + 3B 剩余 + 2B 长度 + 2B 校验 + 2B 尾
 
 /* 完成帧命令码 */
 #define BOOT_FINISH_FRAME_BYTE0   0xFFU
@@ -29,37 +28,8 @@
 
 static const uint8_t g_boot_ack[] = {0x55U, 0xAAU, 0xFFU, 0xFEU, 0x55U, 0x55U}; //ACK帧
 
-// 纯数据部分最大长度 = 整帧最大长度 - 固定部分长度
-#define BOOT_PAYLOAD_MAX_SIZE     (BOOT_PACKET_MAX_SIZE - BOOT_FRAME_FIXED_SIZE)
-
-/* Bootloader 状态枚举 */
-typedef enum {
-    BOOT_STATE_IDLE,          // 空闲，等待数据帧
-    BOOT_STATE_RECEIVING,     // 正在接收固件数据
-    BOOT_STATE_WAIT_FINISH,   // 数据接收完成，等待完成帧
-} boot_state_t;
-
-typedef struct {
-    uint8_t  rx_cache[BOOT_PACKET_MAX_SIZE];   // 线性解析缓存（整帧最大长度）
-    uint16_t rx_cache_len;
-    uint8_t  payload_buf[BOOT_PAYLOAD_MAX_SIZE];  // 纯数据缓存
-
-    uint32_t current_addr;              //当前写入地址
-    uint8_t  stream_cache[4];           //写流缓存，保证4字节对齐写入
-    uint8_t  stream_cache_len;
-
-    uint32_t boot_flag;
-    uint32_t app_version;
-    uint32_t update_date;
-
-    boot_state_t state;                 // 当前状态
-    bool download_active;
-    bool initialized;
-} bootloader_context_t;
-
-static bootloader_context_t g_boot_ctx;
+bootloader_context_t g_boot_ctx;
 static const boot_ops_t *g_boot_ops;
-
 
 static void bootloader_reset_context(void);
 static void bootloader_read_flag_region(void);
@@ -73,7 +43,7 @@ static boot_port_status_t bootloader_handle_finish_frame(uint32_t version, uint3
 static boot_port_status_t bootloader_prepare_download(void);
 static boot_port_status_t bootloader_stream_write(const uint8_t *data, uint32_t len);
 static boot_port_status_t bootloader_stream_flush(void);
-static boot_port_status_t bootloader_write_flag_region(uint32_t flag, uint32_t version, uint32_t date);
+static boot_port_status_t bootloader_write_flag_region(uint32_t flag, uint32_t version, uint32_t date, uint32_t out_flash_flag);
 
 boot_port_status_t easy_bootloader_init(const boot_ops_t *ops)
 {
@@ -98,8 +68,8 @@ boot_port_status_t easy_bootloader_init(const boot_ops_t *ops)
     bootloader_reset_context();
     bootloader_read_flag_region();
 
-    BOOT_LOG("Flag: 0x%08X, Version: 0x%08X, Date: 0x%08X\r\n",
-              g_boot_ctx.boot_flag, g_boot_ctx.app_version, g_boot_ctx.update_date);
+    BOOT_LOG("Flag: 0x%08X, Version: 0x%08X, Date: 0x%08X, OutFlag: 0x%08X\r\n",
+              g_boot_ctx.boot_flag, g_boot_ctx.app_version, g_boot_ctx.update_date, g_boot_ctx.out_flash_flag);
 
     // 判断是否需要跳转到 APP
     // 条件1: 标志位为 APP 模式
@@ -148,11 +118,19 @@ static void bootloader_read_flag_region(void)
 {
     if (g_boot_ops->boot_port_flash_read(BOOT_FLAG_ADDR, (uint8_t *)&g_boot_ctx.boot_flag, 4U) != BOOT_PORT_OK ||
         g_boot_ops->boot_port_flash_read(BOOT_VERSION_ADDR, (uint8_t *)&g_boot_ctx.app_version, 4U) != BOOT_PORT_OK ||
-        g_boot_ops->boot_port_flash_read(BOOT_DATE_ADDR, (uint8_t *)&g_boot_ctx.update_date, 4U) != BOOT_PORT_OK) {
+        g_boot_ops->boot_port_flash_read(BOOT_DATE_ADDR, (uint8_t *)&g_boot_ctx.update_date, 4U) != BOOT_PORT_OK ||
+        g_boot_ops->boot_port_flash_read(OUT_FLASH_FLAG_ADDR, (uint8_t *)&g_boot_ctx.out_flash_flag, 4U) != BOOT_PORT_OK) {
         g_boot_ctx.boot_flag = BOOT_FLAG_ERASED;
         g_boot_ctx.app_version = BOOT_FLAG_ERASED;
         g_boot_ctx.update_date = BOOT_FLAG_ERASED;
+        g_boot_ctx.out_flash_flag = OUT_FLASH_FLAG_EMPTY;
         BOOT_LOG("Read flag region failed, fallback to erased defaults\r\n");
+        return;
+    }
+
+    if (g_boot_ctx.out_flash_flag != OUT_FLASH_FLAG_READY &&
+        g_boot_ctx.out_flash_flag != OUT_FLASH_FLAG_EMPTY) {
+        g_boot_ctx.out_flash_flag = OUT_FLASH_FLAG_EMPTY;
     }
 }
 
@@ -262,6 +240,12 @@ void easy_bootloader_run(void)
             bootloader_reset_context();
             break;
         }
+
+        /* 收到最后一帧后状态会切到 WAIT_FINISH，必须停止数据帧解析，
+         * 避免把紧随其后的完成帧按普通数据帧误吞。 */
+        if (g_boot_ctx.state == BOOT_STATE_WAIT_FINISH) {
+            break;
+        }
     }
 }
 
@@ -368,7 +352,7 @@ static bool bootloader_try_extract_frame(uint32_t *remaining, uint16_t *payload_
     return false;
 }
 
-static boot_port_status_t bootloader_write_flag_region(uint32_t flag, uint32_t version, uint32_t date)
+static boot_port_status_t bootloader_write_flag_region(uint32_t flag, uint32_t version, uint32_t date, uint32_t out_flash_flag)
 {
     // 先擦除标志位区
     boot_port_status_t status = g_boot_ops->boot_port_flash_erase(BOOT_FLAG_REGION_ADDR, BOOT_FLAG_REGION_SIZE);
@@ -403,7 +387,23 @@ static boot_port_status_t bootloader_write_flag_region(uint32_t flag, uint32_t v
     buf[1] = (uint8_t)((date >> 8) & 0xFFU);
     buf[2] = (uint8_t)((date >> 16) & 0xFFU);
     buf[3] = (uint8_t)((date >> 24) & 0xFFU);
-    return g_boot_ops->boot_port_flash_write(BOOT_DATE_ADDR, buf, 4U);
+    status = g_boot_ops->boot_port_flash_write(BOOT_DATE_ADDR, buf, 4U);
+    if (status != BOOT_PORT_OK) {
+        return status;
+    }
+
+    //写入外部 Flash 标志位
+    buf[0] = (uint8_t)(out_flash_flag & 0xFFU);
+    buf[1] = (uint8_t)((out_flash_flag >> 8) & 0xFFU);
+    buf[2] = (uint8_t)((out_flash_flag >> 16) & 0xFFU);
+    buf[3] = (uint8_t)((out_flash_flag >> 24) & 0xFFU);
+    status = g_boot_ops->boot_port_flash_write(OUT_FLASH_FLAG_ADDR, buf, 4U);
+    if (status != BOOT_PORT_OK) {
+        return status;
+    }
+
+    g_boot_ctx.out_flash_flag = out_flash_flag;
+    return BOOT_PORT_OK;
 }
 
 static boot_port_status_t bootloader_handle_payload(uint32_t remaining, uint16_t payload_len)
@@ -599,8 +599,8 @@ static boot_port_status_t bootloader_handle_finish_frame(uint32_t version, uint3
         return BOOT_PORT_ERROR;
     }
 
-    /* 写入标志位区：flag=2 + 版本号 + 日期 */
-    boot_port_status_t status = bootloader_write_flag_region(BOOT_FLAG_APP, version, date);
+    /* 写入标志位区：flag=2 + 版本号 + 日期 + 外部Flash标志=EMPTY */
+    boot_port_status_t status = bootloader_write_flag_region(BOOT_FLAG_APP, version, date, OUT_FLASH_FLAG_EMPTY);
     if (status != BOOT_PORT_OK) {
         BOOT_LOG("Failed to write flag region\r\n");
         return status;

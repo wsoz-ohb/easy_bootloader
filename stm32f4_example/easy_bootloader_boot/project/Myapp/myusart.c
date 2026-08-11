@@ -8,16 +8,16 @@ uint8_t uart1_read_buffer[128];
 struct rt_ringbuffer uart1_ringbuffer_struct;	//串口环形缓存区结构体用于管理我的环形缓存区
 rt_uint8_t uart1_ringbuffer[128];	//环形缓存区实际大小
 
-extern UART_HandleTypeDef huart2;
-extern DMA_HandleTypeDef hdma_usart2_rx;
-uint8_t uart2_rx_dmabuffer[1024];	//空闲中端数据缓存
-uint8_t uart2_read_buffer[1024];
+extern UART_HandleTypeDef huart5;
+extern DMA_HandleTypeDef hdma_uart5_rx;
+uint8_t uart5_rx_dmabuffer[1024];	//空闲中端数据缓存
+uint8_t uart5_read_buffer[1024];
 
-struct rt_ringbuffer uart2_ringbuffer_struct;	//串口环形缓存区结构体用于管理我的环形缓存区
-rt_uint8_t uart2_ringbuffer[1024];	//环形缓存区实际大小
+struct rt_ringbuffer uart5_ringbuffer_struct;	//串口环形缓存区结构体用于管理我的环形缓存区
+rt_uint8_t uart5_ringbuffer[1024];	//环形缓存区实际大小
 void myusart_init(void)
 {
-		rt_ringbuffer_init(&uart2_ringbuffer_struct,uart2_ringbuffer,sizeof(uart2_ringbuffer));//初始化环形缓存区
+		rt_ringbuffer_init(&uart5_ringbuffer_struct,uart5_ringbuffer,sizeof(uart5_ringbuffer));//初始化环形缓存区
     rt_ringbuffer_init(&uart1_ringbuffer_struct,uart1_ringbuffer,sizeof(uart1_ringbuffer));//初始化环形缓存区
 }
 
@@ -36,19 +36,19 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 					
         HAL_UARTEx_ReceiveToIdle_DMA(huart, uart1_rx_dmabuffer, sizeof(uart1_rx_dmabuffer));	//打开DMA运输
 			__HAL_DMA_DISABLE_IT(&hdma_usart1_rx, DMA_IT_HT);	//关闭DMA半中断
-    }else if (huart->Instance==USART2)
+    }else if (huart->Instance==UART5)
     {
         HAL_UART_DMAStop(huart);	//暂停DMA传输，保证我的DMA传输的完整性(因为我的DMA可能任然是活跃的没有搬运到128字节，它还在检测数据)
 
-				if(rt_ringbuffer_space_len(&uart2_ringbuffer_struct)!=0)	//判断缓存区空间
+				if(rt_ringbuffer_space_len(&uart5_ringbuffer_struct)!=0)	//判断缓存区空间
 				{
-					uint16_t putsize=rt_ringbuffer_put(&uart2_ringbuffer_struct,uart2_rx_dmabuffer,Size);
+					uint16_t putsize=rt_ringbuffer_put(&uart5_ringbuffer_struct,uart5_rx_dmabuffer,Size);
 					if(putsize!=Size)	//环形缓存区数据未全部放入
-						uart_printf(&huart2,"Ringbuffer Size too Small\r\n");
+						uart_printf(&huart5,"Ringbuffer Size too Small\r\n");
 				}
 					
-        HAL_UARTEx_ReceiveToIdle_DMA(huart, uart2_rx_dmabuffer, sizeof(uart2_rx_dmabuffer));	//打开DMA运输
-			__HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);	//关闭DMA半中断        
+        HAL_UARTEx_ReceiveToIdle_DMA(huart, uart5_rx_dmabuffer, sizeof(uart5_rx_dmabuffer));	//打开DMA运输
+			__HAL_DMA_DISABLE_IT(&hdma_uart5_rx, DMA_IT_HT);	//关闭DMA半中断        
     }
 }
 
@@ -67,13 +67,13 @@ void uart1_task(void)
 
 void uart2_task(void)
 {
-	uint16_t data_size=rt_ringbuffer_data_len(&uart2_ringbuffer_struct);	//获取缓存区数据大小
+	uint16_t data_size=rt_ringbuffer_data_len(&uart5_ringbuffer_struct);	//获取缓存区数据大小
 	if(data_size>0)
 	{
-		rt_ringbuffer_get(&uart2_ringbuffer_struct,uart2_read_buffer,data_size);
-		uart_printf(&huart2,"%s\r\n",uart2_read_buffer);	//打印接收到的数据
-		rt_ringbuffer_reset(&uart2_ringbuffer_struct);
-    memset(uart1_read_buffer,0,data_size);  		
+		rt_ringbuffer_get(&uart5_ringbuffer_struct,uart5_read_buffer,data_size);
+		uart_printf(&huart5,"%s\r\n",uart5_read_buffer);	//打印接收到的数据
+		rt_ringbuffer_reset(&uart5_ringbuffer_struct);
+    memset(uart5_read_buffer,0,data_size);  		
 	}
 }
 

@@ -112,31 +112,10 @@ boot_port_app_status_t easy_bootloader_app_init(const boot_app_ops_t *ops)
 
 void easy_bootloader_app_run(void)
 {
-    if (!g_app_ctx.initialized) {
-        return;
-    }
-
-    app_poll_data();
-
-    bl_app_cmd_t cmd = app_check_dataframe();
-
-    switch (cmd) {
-        case BL_APP_CMD_QUERY_VERSION:
-            app_handle_query_version();
-            break;
-
-        case BL_APP_CMD_QUERY_DATE:
-            app_handle_query_date();
-            break;
-
-        case BL_APP_CMD_START_FLASH:
-            app_handle_start_flash();
-            break;
-
-        case BL_APP_CMD_NONE:
-        default:
-            break;
-    }
+    /* 旧 APP 升级通道已停用：
+     * 当前工程统一由 Myapp/myusart.c 的 uart2_task() 负责 OTA 收包与状态切换。 */
+    (void)g_app_ctx;
+    return;
 }
 
 static void app_reset_context(void)

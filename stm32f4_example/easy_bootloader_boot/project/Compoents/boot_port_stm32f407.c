@@ -5,12 +5,13 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include "ota_flash.h"
 
 /* 外部变量声明 */
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
-extern DMA_HandleTypeDef hdma_usart2_rx;
-extern struct rt_ringbuffer uart2_ringbuffer_struct;
+extern UART_HandleTypeDef huart5;
+extern struct rt_ringbuffer uart5_ringbuffer_struct;
 
 /* STM32F407 Flash 扇区信息 */
 typedef struct {
@@ -119,13 +120,17 @@ boot_port_status_t boot_port_flash_read(uint32_t addr, uint8_t *data, uint32_t l
 
 boot_port_status_t boot_port_data_write(const uint8_t *data, uint32_t len)
 {
-    HAL_StatusTypeDef status = HAL_UART_Transmit(&huart2, (uint8_t *)data, len, 1000);
+    HAL_StatusTypeDef status = HAL_UART_Transmit(&huart5, (uint8_t *)data, len, 1000);
     return (status == HAL_OK) ? BOOT_PORT_OK : BOOT_PORT_ERROR;
 }
 
 uint32_t boot_port_data_read(uint8_t *buf, uint32_t max_len)
 {
-    return rt_ringbuffer_get(&uart2_ringbuffer_struct, buf, max_len);
+    if (g_boot_ctx.out_flash_flag == OUT_FLASH_FLAG_READY) {
+        return ota_flash_read(buf, max_len);
+    }
+
+    return rt_ringbuffer_get(&uart5_ringbuffer_struct, buf, max_len);
 }
 
 void boot_port_log(const char *fmt, ...)
@@ -164,8 +169,10 @@ void boot_port_jump_to_app(uint32_t app_addr)
     /* 3. 复位外设 - 停止 DMA 和 UART */
     HAL_UART_DMAStop(&huart1);
     HAL_UART_DMAStop(&huart2);
+    HAL_UART_DMAStop(&huart5);
     HAL_UART_DeInit(&huart1);
     HAL_UART_DeInit(&huart2);
+    HAL_UART_DeInit(&huart5);
 
     /* 4. 清除所有中断挂起标志 */
     for (int i = 0; i < 8; i++) {
@@ -213,6 +220,7 @@ boot_ops_t boot_port_ops = {
 
 void bootloader_app_init(void)
 {
+    ota_flash_init();
     easy_bootloader_init(&boot_port_ops);   //启动bootloader，传入ops操作集
 }
 
@@ -221,4 +229,3 @@ void bootloader_app_loop(void)
 {
     easy_bootloader_run();
 }
-
