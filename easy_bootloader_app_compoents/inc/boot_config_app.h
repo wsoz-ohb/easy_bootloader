@@ -1,37 +1,18 @@
 #ifndef BOOT_CONFIG_APP_H
 #define BOOT_CONFIG_APP_H
 
-#include <stdint.h>
+/* 包长包含 11 字节帧开销。 */
+#define BOOT_APP_PACKET_MAX_SIZE          1024U
 
-#define BOOT_APP_CONFIG_ENABLE_LOG        1U      // 1启用日志输出 0禁用日志输出
+/* STM32F407VG 与 W25Q128 默认分区。 */
+#define BOOT_APP_DEFAULT_TARGET_ADDRESS   0x08010000UL
+#define BOOT_APP_DEFAULT_IMAGE_MAX_SIZE   (960UL * 1024UL)
+#define BOOT_APP_DEFAULT_SLOT_A_SIZE      (2UL * 1024UL * 1024UL)
+#define BOOT_APP_DEFAULT_SLOT_B_SIZE      (1UL * 1024UL * 1024UL)
+#define BOOT_APP_DEFAULT_ERASE_SIZE       4096UL
+#define BOOT_APP_DEFAULT_BCB_REGION_SIZE  (16UL * 1024UL)
+#define BOOT_APP_DEFAULT_TIMEOUT_MS       30000UL
 
-/*
- * Flash 布局
- */
-#define BOOT_APP_FLAG_REGION_ADDR         0x080E0000U
-#define BOOT_APP_FLAG_REGION_SIZE         0x00020000U
+#define BOOT_APP_CONFIG_ENABLE_LOG        1U
 
-/*
- * 标志位区布局 (基于 BOOT_FLAG_REGION_ADDR)
- * Word 0: bootloader_flag  - 启动标志 (1=Bootloader模式, 2=APP模式)
- * Word 1: app_version      - 应用版本号
- * Word 2: update_date      - 更新日期 (格式: 0xYYYYMMDD, 如 0x20251201)
- */
-#define BOOT_APP_FLAG_OFFSET              0x00U
-#define BOOT_APP_VERSION_OFFSET           0x04U
-#define BOOT_APP_DATE_OFFSET              0x08U
-
-#define BOOT_APP_FLAG_ADDR                (BOOT_APP_FLAG_REGION_ADDR + BOOT_APP_FLAG_OFFSET)
-#define BOOT_APP_VERSION_ADDR             (BOOT_APP_FLAG_REGION_ADDR + BOOT_APP_VERSION_OFFSET)
-#define BOOT_APP_DATE_ADDR                (BOOT_APP_FLAG_REGION_ADDR + BOOT_APP_DATE_OFFSET)
-
-/*
- * 协议缓冲配置
- */
-#define BOOT_APP_PACKET_MAX_SIZE          1013U
-#define BOOT_APP_RINGBUFFER_SIZE    1013U
-#define BOOT_APP_UART_TIMEOUT_MS          5000U
-
-
-#endif // !BOOT_CONFIG_APP_H
-
+#endif /* BOOT_CONFIG_APP_H */

@@ -1,60 +1,43 @@
 #include "scheduler.h"
 
 extern void bootloader_app_init(void);
+extern void bootloader_app_loop(void);
 
-
-// 全局变量，用于存储任务数量
 uint8_t task_num;
 
-typedef struct {
+typedef struct
+{
     void (*task_func)(void);
     uint32_t rate_ms;
     uint32_t last_run;
 } task_t;
 
-
-
-// 静态任务数组，每个任务包含任务函数、执行周期（毫秒）和上次运行时间（毫秒）
 static task_t scheduler_task[] =
 {
-	{uart1_task,100,0},
-	{uart2_task,10,0},
+    {uart1_task, 100U, 0U},
+    {bootloader_app_loop, 10U, 0U},
 };
 
-/**
- * @brief 调度器初始化函数
- * 计算任务数组的元素个数，并将结果存储在 task_num 中
- */
 void scheduler_init(void)
 {
-    // 计算任务数组的元素个数，并将结果存储在 task_num 中
-    task_num = sizeof(scheduler_task) / sizeof(task_t);
-		myusart_init();
-		bootloader_app_init();
+    task_num = sizeof(scheduler_task) / sizeof(scheduler_task[0]);
+    myusart_init();
+    bootloader_app_init();
 }
 
-/**
- * @brief 调度器运行函数
- * 遍历任务数组，检查是否有任务需要执行。如果当前时间已经超过任务的执行周期，则执行该任务并更新上次运行时间
- */
 void scheduler_run(void)
 {
-    // 遍历任务数组中的所有任务
-    for (uint8_t i = 0; i < task_num; i++)
+    uint8_t index;
+
+    for (index = 0U; index < task_num; index++)
     {
-        // 获取当前的系统时间（毫秒）
         uint32_t now_time = HAL_GetTick();
 
-        // 检查当前时间是否达到任务的执行时间
-        if (now_time >= scheduler_task[i].rate_ms + scheduler_task[i].last_run)
+        if ((uint32_t)(now_time - scheduler_task[index].last_run) >=
+            scheduler_task[index].rate_ms)
         {
-            // 更新任务的上次运行时间为当前时间
-            scheduler_task[i].last_run = now_time;
-
-            // 执行任务函数
-            scheduler_task[i].task_func();
+            scheduler_task[index].last_run = now_time;
+            scheduler_task[index].task_func();
         }
     }
 }
-
-

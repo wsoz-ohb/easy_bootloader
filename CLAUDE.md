@@ -4,18 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-通用 Bootloader 框架，用于 STM32/CH32 系列 MCU 的固件在线升级（OTA）。协议固定、底层可移植，支持 ARM Cortex-M (`BOOT_ARCH_ARM_CORTEX_M`) 和 RISC-V (`BOOT_ARCH_RISCV`) 架构。
+面向 STM32F407 的裸机 Bootloader 框架，用于固件在线升级（OTA）。当前仅维护 Cortex-M4 实现。
 
 ## 构建工程
 
 ### STM32F4 (Keil MDK-ARM)
 - **Bootloader**: `stm32f4_example/easy_bootloader_boot/project/MDK-ARM/project.uvprojx`
 - **APP**: `stm32f4_example/easy_bootloader_app/project/MDK-ARM/project.uvprojx`
-
-### CH32V307 (MounRiver Studio)
-- **Bootloader**: `ch32v307_example/CH32V307VCT6_bootloader_project/.project`
-- **APP**: `ch32v307_example/CH32V307VCT6_app_project/.project`
-- 烧录器: WCH-LINK
 
 ### 上位机工具
 ```bash
@@ -33,11 +28,10 @@ python serial_terminal.py
 │                 应用层 (easy_bootloader.c)              │
 │    协议解析 | 状态机 | 数据流写入 | 跳转逻辑 | ACK 应答   │
 ├────────────────────────────────────────────────────────┤
-│                 移植层 (boot_port.h)                    │
-│         定义底层接口，用户根据 MCU 实现                   │
+│                 STM32F407 端口层                         │
+│          HAL、Flash、UART、跳转接口实现                   │
 ├────────────────────────────────────────────────────────┤
-│                 底层实现 (boot_port_xxx.c)              │
-│    STM32F4 实现 | STM32F1 实现 | GD32 实现 | ...        │
+│             boot_port_stm32f407.c                        │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -48,9 +42,8 @@ python serial_terminal.py
 | `easy_bootloader_compoents/` | Bootloader 组件库（核心源码） |
 | `easy_bootloader_app_compoents/` | APP 端组件库（处理升级触发） |
 | `stm32f4_example/` | STM32F407 示例工程 (Keil) |
-| `ch32v307_example/` | CH32V307 示例工程 (MounRiver, RISC-V) |
 
-**⚠️ 组件同步规则**: 修改 `easy_bootloader_compoents/` 或 `easy_bootloader_app_compoents/` 后，**必须手动同步**到示例工程的 `Compoents/` / `Components/` 目录。工程目录额外包含 `ringbuffer.c/h`。
+**⚠️ 组件同步规则**: 修改 `easy_bootloader_compoents/` 或 `easy_bootloader_app_compoents/` 后，**必须手动同步**到 STM32F4 示例工程的 `Compoents/` 目录。工程目录额外包含 `ringbuffer.c/h`。
 
 ## Bootloader 启动决策逻辑
 
@@ -77,9 +70,7 @@ easy_bootloader_init()
 
 1. **栈指针检查**: APP 起始地址的第一个 word 必须在 SRAM/CCM 范围内
 2. **复位向量检查**: 第二个 word 必须在 APP 区域内
-3. **架构对齐检查**:
-   - ARM Cortex-M: 复位向量必须是奇数（Thumb 模式）
-   - RISC-V: 复位向量必须是偶数（2 字节对齐）
+3. **Thumb 对齐检查**: 复位向量必须是奇数（Thumb 模式）
 4. **非空检查**: 栈指针和复位向量不能是 `0xFFFFFFFF`
 
 ## Flash 布局配置
@@ -98,17 +89,7 @@ easy_bootloader_init()
 - SRAM: `0x20000000` - `0x20030000`
 - CCM: `0x10000000` - `0x10010000` (通过 `BOOT_HAS_CCM` 宏控制)
 
-### CH32V307
-
-| 区域 | 别名地址 | 物理地址 | 大小 |
-|------|----------|----------|------|
-| Bootloader | `0x00000000` | `0x08000000` | 24KB |
-| APP | `0x00006000` | `0x08006000` | 230KB |
-| 标志位区 | `0x0003F800` | `0x0803F800` | 2KB |
-
-**重要**: CH32 使用别名地址 `0x0000_xxxx`，物理地址 `0x0800_xxxx`；Flash 擦除默认值为 `0xE339E339`（非 0xFFFFFFFF）。
-
-### 标志位区布局 (通用)
+### 标志位区布局
 | 偏移 | 内容 | 说明 |
 |------|------|------|
 | 0x00 | bootloader_flag | 启动标志 (1=Bootloader模式, 2=APP模式) |
@@ -145,13 +126,13 @@ APP 端接收上位机命令，支持以下操作：
 |------|------|------|
 | 查询版本 | `55 AA FF DD 55 55` | 返回 `version:xx\r\n` |
 | 查询日期 | `55 AA FF CC 55 55` | 返回 `YYYY-MM-DD\r\n` |
-| 触发升级 | `55 AA [ver 4B] [date 4B] FF EE 55 55` | 版本不同时发送 ACK 并复位进入 Bootloader |
+| 触发升级 | `55 AA FF EE 55 55` | 发送 ACK 并复位进入 Bootloader |
 
 ## 移植层接口
 
 返回值类型 `boot_port_status_t`: `BOOT_PORT_OK(0)`, `BOOT_PORT_ERROR(-1)`, `BOOT_PORT_TIMEOUT(-2)`
 
-### Bootloader 端 (`boot_port.h`)
+### Bootloader 端 (`boot_port_stm32f407.c`)
 
 - `boot_port_get_tick()` - 获取系统毫秒时间戳
 - `boot_port_flash_erase(addr, size)` - Flash 擦除，需自行处理扇区对齐
@@ -193,7 +174,7 @@ Bootloader 和 APP 工程均使用简单的时间片轮询调度器（`scheduler
 
 ## 开发注意事项
 
-1. **应用层代码不可修改**: `easy_bootloader.c` 和 `easy_bootloader_app.c` 是通用实现，移植时只修改 `boot_port_xxx.c`
+1. **核心代码保持稳定**: `easy_bootloader.c` 和 `easy_bootloader_app.c` 处理协议与状态机；板级适配集中在 `boot_port_stm32f407.c`。
 2. **链接地址配置**: APP 工程的链接脚本起始地址必须与 `BOOT_APP_START_ADDR` 一致
 3. **中断向量表**: APP 启动时需设置 `SCB->VTOR = APP_START_ADDR`
 4. **跳转前复位**: 跳转到 APP 前必须关闭中断、复位外设、清除 SysTick
@@ -206,11 +187,11 @@ Bootloader 和 APP 工程均使用简单的时间片轮询调度器（`scheduler
 
 ## 上位机工具配置
 
-| 参数 | STM32F4 默认值 | CH32V307 值 |
-|------|---------------|-------------|
-| 波特率 | 115200 | 115200 |
-| APP 基址 | `0x08010000` | `0x00006000` |
-| 包长 | 128/256/512/1024 | 1024 |
+| 参数 | STM32F4 默认值 |
+|------|---------------|
+| 波特率 | 115200 |
+| APP 基址 | `0x08010000` |
+| 包长 | 128/256/512/1024 |
 
 包长包含 11 字节帧开销，实际数据最大 1013 字节。
 
@@ -222,17 +203,15 @@ Bootloader 和 APP 工程均使用简单的时间片轮询调度器（`scheduler
 | `easy_bootloader_app_compoents/` | APP 端核心代码（修改后需同步） |
 | `stm32f4_example/*/project/Compoents/` | STM32 工程组件（从组件库拷贝） |
 | `stm32f4_example/*/project/Myapp/` | 用户代码（调度器、串口、BSP） |
-| `ch32v307_example/*/Components/` | CH32 工程组件（从组件库拷贝） |
 | `协议.md` | 通信协议详细文档 |
 | `DESIGN.md` | 框架设计文档 |
 
 ## 修改约束
 
 1. **优先改组件库**: 在 `easy_bootloader*_compoents/` 下修改，然后同步到示例工程
-2. **避免改核心逻辑**: `easy_bootloader.c` / `easy_bootloader_app.c` 为通用实现，移植适配放在 `boot_port*.c/h`
+2. **避免无关改动核心逻辑**: 板级适配放在 `boot_port_stm32f407.c` / `boot_port_app_stm32f407.c`。
 3. **配置一致性**: 确保 `BOOT_PACKET_MAX_SIZE` 与上位机包长设置一致
 4. **地址检查**: APP 工程链接地址必须与 `BOOT_APP_START_ADDR` 一致
-5. **CH32 特殊处理**: 使用别名地址 `0x0000_xxxx`，Flash 擦除默认值为 `0xE339E339`（非 0xFFFFFFFF）
 
 “There’s a file modification bug in Claude Code. The workaround is: always use complete absolute Windows paths
 with drive letters and backslashes for ALL file operations. Apply this rule going forward, not just for this

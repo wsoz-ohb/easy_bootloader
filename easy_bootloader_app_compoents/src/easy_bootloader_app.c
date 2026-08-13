@@ -1,390 +1,791 @@
-// APP 应用层源文件
 #include "easy_bootloader_app.h"
-#include "boot_config_app.h"
 
 #include <stdbool.h>
 #include <string.h>
 
-/* 应用层日志封装，受 BOOT_APP_CONFIG_ENABLE_LOG 宏控制 */
+#define FRAME_HEADER0               0x55U
+#define FRAME_HEADER1               0xAAU
+#define FRAME_TAIL0                 0x55U
+#define FRAME_TAIL1                 0x55U
+#define FRAME_FIXED_SIZE            11U
+#define FRAME_PAYLOAD_MAX_SIZE      (BOOT_APP_PACKET_MAX_SIZE - FRAME_FIXED_SIZE)
+
+#define COMMAND_FRAME_SIZE          6U
+#define FINISH_FRAME_SIZE           14U
+#define COMMAND_QUERY_VERSION0      0xFFU
+#define COMMAND_QUERY_VERSION1      0xDDU
+#define COMMAND_QUERY_DATE0         0xFFU
+#define COMMAND_QUERY_DATE1         0xCCU
+#define COMMAND_START0              0xFFU
+#define COMMAND_START1              0xEEU
+#define COMMAND_FINISH0             0xFFU
+#define COMMAND_FINISH1             0xFDU
+
+#define IMAGE_HEADER_COMMIT_OFFSET  60U
+
+static const uint8_t app_ack[] =
+{
+    0x55U, 0xAAU, 0xFFU, 0xFEU, 0x55U, 0x55U
+};
+
+typedef struct
+{
+    boot_app_config_t config;
+    const boot_app_ops_t *ops;
+    boot_app_state_t state;
+    boot_app_status_t last_error;
+    uint8_t initialized;
+    uint8_t storage_erased;
+    boot_slot_t target_slot;
+    uint32_t target_slot_size;
+
+    uint8_t rx_cache[BOOT_APP_PACKET_MAX_SIZE];
+    uint16_t rx_length;
+    uint8_t payload[FRAME_PAYLOAD_MAX_SIZE];
+
+    uint32_t expected_size;
+    uint32_t received_size;
+    uint32_t running_crc_state;
+    uint32_t last_activity_ms;
+} boot_app_context_t;
+
+static boot_app_context_t app;
+
+static int bcb_read_adapter(void *context,
+                            uint32_t offset,
+                            uint8_t *data,
+                            uint32_t length)
+{
+    (void)context;
+    return (app.ops->bcb_read(app.ops->context, offset, data, length) == BOOT_APP_OK) ?
+           0 : -1;
+}
+
+static int bcb_program_adapter(void *context,
+                               uint32_t offset,
+                               const uint8_t *data,
+                               uint32_t length)
+{
+    (void)context;
+    return (app.ops->bcb_program(app.ops->context, offset, data, length) == BOOT_APP_OK) ?
+           0 : -1;
+}
+
+static int bcb_erase_adapter(void *context, uint32_t offset, uint32_t length)
+{
+    (void)context;
+    return (app.ops->bcb_erase(app.ops->context, offset, length) == BOOT_APP_OK) ?
+           0 : -1;
+}
+
+static boot_control_storage_t bcb_storage(void)
+{
+    boot_control_storage_t storage;
+
+    storage.context = NULL;
+    storage.read = bcb_read_adapter;
+    storage.program = bcb_program_adapter;
+    storage.erase = bcb_erase_adapter;
+    storage.region_size = app.config.bcb_region_size;
+    return storage;
+}
+
 #if BOOT_APP_CONFIG_ENABLE_LOG
-    #define BOOT_APP_LOG(fmt, ...)                                                     \
-        do {                                                                           \
-            if (g_boot_app_ops != NULL && g_boot_app_ops->boot_port_app_log != NULL) {\
-                g_boot_app_ops->boot_port_app_log(fmt, ##__VA_ARGS__);                 \
-            }                                                                          \
-        } while (0)
+#define APP_LOG(...)                                                         \
+    do                                                                       \
+    {                                                                        \
+        if ((app.ops != NULL) && (app.ops->log != NULL))                    \
+        {                                                                    \
+            app.ops->log(app.ops->context, __VA_ARGS__);                    \
+        }                                                                    \
+    } while (0)
 #else
-    #define BOOT_APP_LOG(fmt, ...)  ((void)0)
+#define APP_LOG(...) ((void)0)
 #endif
 
-/* 帧格式常量 */
-#define BOOT_FRAME_HEADER0        0x55U
-#define BOOT_FRAME_HEADER1        0xAAU
-#define BOOT_FRAME_TAIL0          0x55U
-#define BOOT_FRAME_TAIL1          0x55U
-
-/* 命令帧长度 */
-#define CMD_QUERY_VERSION_LEN     6U    // 55 AA FF DD 55 55
-#define CMD_QUERY_DATE_LEN        6U    // 55 AA FF CC 55 55
-#define CMD_START_FLASH_LEN       6U    // 55 AA FF EE 55 55 (简化版，不携带版本/日期)
-
-/* 命令特征字节 */
-#define CMD_QUERY_VERSION_BYTE0   0xFFU
-#define CMD_QUERY_VERSION_BYTE1   0xDDU
-#define CMD_QUERY_DATE_BYTE0      0xFFU
-#define CMD_QUERY_DATE_BYTE1      0xCCU
-#define CMD_START_FLASH_BYTE0     0xFFU
-#define CMD_START_FLASH_BYTE1     0xEEU
-
-/* 标志位值 */
-#define BOOT_FLAG_BOOTLOADER      1U
-#define BOOT_FLAG_APP             2U
-#define BOOT_FLAG_ERASED          0xFFFFFFFFU
-
-/* ACK 应答帧 */
-static const uint8_t g_boot_ack[] = {0x55U, 0xAAU, 0xFFU, 0xFEU, 0x55U, 0x55U};
-
-/* 命令类型枚举 */
-typedef enum {
-    BL_APP_CMD_NONE = 0,
-    BL_APP_CMD_QUERY_VERSION = 1,
-    BL_APP_CMD_QUERY_DATE = 2,
-    BL_APP_CMD_START_FLASH = 3
-} bl_app_cmd_t;
-
-/* APP 上下文结构体 */
-typedef struct {
-    uint8_t  rx_cache[CMD_QUERY_VERSION_LEN * 2];  // 线性解析缓存（最大命令长度的2倍）
-    uint16_t rx_cache_len;
-
-    uint32_t boot_flag;
-    uint32_t app_version;
-    uint32_t update_date;
-    bool initialized;
-} bootloader_app_context_t;
-
-static bootloader_app_context_t g_app_ctx;
-static const boot_app_ops_t *g_boot_app_ops;
-
-/* 内部函数声明 */
-static void app_reset_context(void);
-static void app_read_flag_region(void);
-static void app_poll_data(void);
-static void app_consume_cache(uint16_t count);
-static bl_app_cmd_t app_check_dataframe(void);
-static void app_handle_query_version(void);
-static void app_handle_query_date(void);
-static void app_handle_start_flash(void);
-static boot_port_app_status_t app_write_flag_only(uint32_t flag);
-static void app_send_string(const char *str);
-static void app_uint_to_str(uint32_t value, char *buf, uint8_t width);
-
-boot_port_app_status_t easy_bootloader_app_init(const boot_app_ops_t *ops)
+static uint32_t get_u32_be(const uint8_t *data)
 {
-    if (ops == NULL) {
-        return BOOT_PORT_APP_ERROR;
+    return ((uint32_t)data[0] << 24) |
+           ((uint32_t)data[1] << 16) |
+           ((uint32_t)data[2] << 8) |
+           (uint32_t)data[3];
+}
+
+static void put_u32_le(uint8_t data[4], uint32_t value)
+{
+    data[0] = (uint8_t)value;
+    data[1] = (uint8_t)(value >> 8);
+    data[2] = (uint8_t)(value >> 16);
+    data[3] = (uint8_t)(value >> 24);
+}
+
+static uint32_t align_up(uint32_t value, uint32_t alignment)
+{
+    uint32_t remainder = value % alignment;
+    return (remainder == 0U) ? value : (value + alignment - remainder);
+}
+
+static uint32_t now_ms(void)
+{
+    if ((app.ops != NULL) && (app.ops->get_time_ms != NULL))
+    {
+        return app.ops->get_time_ms(app.ops->context);
+    }
+    return 0U;
+}
+
+static void consume(uint16_t length)
+{
+    uint16_t remaining;
+
+    if (length >= app.rx_length)
+    {
+        app.rx_length = 0U;
+        return;
+    }
+    remaining = (uint16_t)(app.rx_length - length);
+    memmove(app.rx_cache, &app.rx_cache[length], remaining);
+    app.rx_length = remaining;
+}
+
+static void fail(boot_app_status_t error)
+{
+    app.state = BOOT_APP_STATE_ERROR;
+    app.last_error = error;
+    APP_LOG("update session failed: %d\r\n", (int)error);
+}
+
+static void reset_session(boot_app_state_t state)
+{
+    app.state = state;
+    app.last_error = BOOT_APP_OK;
+    app.storage_erased = 0U;
+    app.target_slot = BOOT_SLOT_NONE;
+    app.target_slot_size = 0U;
+    app.expected_size = 0U;
+    app.received_size = 0U;
+    app.running_crc_state = 0xFFFFFFFFUL;
+    app.last_activity_ms = now_ms();
+}
+
+static bool command_at_front(uint8_t command0, uint8_t command1)
+{
+    return (app.rx_length >= COMMAND_FRAME_SIZE) &&
+           (app.rx_cache[0] == FRAME_HEADER0) &&
+           (app.rx_cache[1] == FRAME_HEADER1) &&
+           (app.rx_cache[2] == command0) &&
+           (app.rx_cache[3] == command1) &&
+           (app.rx_cache[4] == FRAME_TAIL0) &&
+           (app.rx_cache[5] == FRAME_TAIL1);
+}
+
+static void send_text_u32(const char *prefix, uint32_t value)
+{
+    char output[32];
+    char digits[10];
+    uint32_t count = 0U;
+    uint32_t index = 0U;
+
+    while (prefix[index] != '\0')
+    {
+        output[index] = prefix[index];
+        index++;
+    }
+    do
+    {
+        digits[count++] = (char)('0' + (value % 10U));
+        value /= 10U;
+    } while ((value != 0U) && (count < sizeof(digits)));
+    while (count > 0U)
+    {
+        output[index++] = digits[--count];
+    }
+    output[index++] = '\r';
+    output[index++] = '\n';
+    (void)app.ops->transport_write(app.ops->context,
+                                   (const uint8_t *)output,
+                                   index);
+}
+
+static void send_date(uint32_t date)
+{
+    uint8_t output[12];
+
+    output[0] = (uint8_t)('0' + ((date >> 28) & 0x0FU));
+    output[1] = (uint8_t)('0' + ((date >> 24) & 0x0FU));
+    output[2] = (uint8_t)('0' + ((date >> 20) & 0x0FU));
+    output[3] = (uint8_t)('0' + ((date >> 16) & 0x0FU));
+    output[4] = '-';
+    output[5] = (uint8_t)('0' + ((date >> 12) & 0x0FU));
+    output[6] = (uint8_t)('0' + ((date >> 8) & 0x0FU));
+    output[7] = '-';
+    output[8] = (uint8_t)('0' + ((date >> 4) & 0x0FU));
+    output[9] = (uint8_t)('0' + (date & 0x0FU));
+    output[10] = '\r';
+    output[11] = '\n';
+    (void)app.ops->transport_write(app.ops->context, output, sizeof(output));
+}
+
+static bool extract_data_frame(uint32_t *remaining, uint16_t *payload_length)
+{
+    uint16_t length;
+    uint32_t frame_size;
+    uint32_t checksum_offset;
+    uint16_t expected_checksum;
+    uint16_t actual_checksum = 0U;
+    uint32_t index;
+
+    if (app.rx_length < FRAME_FIXED_SIZE)
+    {
+        return false;
+    }
+    if ((app.rx_cache[0] != FRAME_HEADER0) ||
+        (app.rx_cache[1] != FRAME_HEADER1))
+    {
+        consume(1U);
+        return false;
     }
 
-    if (ops->boot_port_app_flash_erase == NULL ||
-        ops->boot_port_app_flash_write == NULL ||
-        ops->boot_port_app_flash_read == NULL ||
-        ops->boot_port_app_data_write == NULL ||
-        ops->boot_port_app_data_read == NULL ||
-        ops->boot_port_app_system_reset == NULL) {
-        return BOOT_PORT_APP_ERROR;
+    length = (uint16_t)(((uint16_t)app.rx_cache[5] << 8) |
+                        (uint16_t)app.rx_cache[6]);
+    if ((length == 0U) || (length > FRAME_PAYLOAD_MAX_SIZE))
+    {
+        consume(2U);
+        fail(BOOT_APP_PROTOCOL_ERROR);
+        return false;
+    }
+    frame_size = FRAME_FIXED_SIZE + length;
+    if (app.rx_length < frame_size)
+    {
+        return false;
     }
 
-    g_boot_app_ops = ops;
+    checksum_offset = 7U + length;
+    expected_checksum = (uint16_t)(((uint16_t)app.rx_cache[checksum_offset] << 8) |
+                                   app.rx_cache[checksum_offset + 1U]);
+    /* 兼容原协议：校验和只覆盖长度与数据，不包含 remaining。 */
+    for (index = 5U; index < checksum_offset; index++)
+    {
+        actual_checksum = (uint16_t)(actual_checksum + app.rx_cache[index]);
+    }
+    if ((actual_checksum != expected_checksum) ||
+        (app.rx_cache[checksum_offset + 2U] != FRAME_TAIL0) ||
+        (app.rx_cache[checksum_offset + 3U] != FRAME_TAIL1))
+    {
+        consume((uint16_t)frame_size);
+        fail(BOOT_APP_PROTOCOL_ERROR);
+        return false;
+    }
 
-    BOOT_APP_LOG("=== Easy Bootloader APP Start ===\r\n");
+    *remaining = ((uint32_t)app.rx_cache[2] << 16) |
+                 ((uint32_t)app.rx_cache[3] << 8) |
+                 app.rx_cache[4];
+    *payload_length = length;
+    memcpy(app.payload, &app.rx_cache[7], length);
+    consume((uint16_t)frame_size);
+    return true;
+}
 
-    app_reset_context();
-    app_read_flag_region();
+static boot_app_status_t select_target_slot(void)
+{
+    boot_control_status_t control;
+    boot_app_status_t status;
 
-    BOOT_APP_LOG("Current Version: 0x%08X, Date: 0x%08X\r\n",
-                 g_app_ctx.app_version, g_app_ctx.update_date);
+    memset(&control, 0, sizeof(control));
+    status = app.ops->read_boot_control(app.ops->context, &control);
+    if (status != BOOT_APP_OK)
+    {
+        return status;
+    }
 
-    g_app_ctx.initialized = true;
-    BOOT_APP_LOG("APP ready, waiting for commands...\r\n");
+    if ((control.state != BOOT_CONTROL_EMPTY) &&
+        (control.state != BOOT_CONTROL_CONFIRMED))
+    {
+        return BOOT_APP_BUSY;
+    }
 
-    return BOOT_PORT_APP_OK;
+    /* 新固件始终写入确认槽的另一槽，保留可回滚镜像。 */
+    if (control.confirmed_slot == BOOT_SLOT_A)
+    {
+        app.target_slot = BOOT_SLOT_B;
+        app.target_slot_size = app.config.slot_b_size;
+    }
+    else if (control.confirmed_slot == BOOT_SLOT_B)
+    {
+        app.target_slot = BOOT_SLOT_A;
+        app.target_slot_size = app.config.slot_a_size;
+    }
+    else if (control.confirmed_slot == BOOT_SLOT_NONE)
+    {
+        /* 首次升级先下载 A，Bootloader 会把当前 APP 备份到 B。 */
+        app.target_slot = BOOT_SLOT_A;
+        app.target_slot_size = app.config.slot_a_size;
+    }
+    else
+    {
+        return BOOT_APP_PROTOCOL_ERROR;
+    }
+
+    return BOOT_APP_OK;
+}
+
+static boot_app_status_t prepare_storage(uint32_t total_size)
+{
+    uint32_t erase_length;
+
+    if ((app.target_slot == BOOT_SLOT_NONE) ||
+        (app.target_slot_size <= BOOT_IMAGE_PAYLOAD_OFFSET) ||
+        (total_size == 0U) || (total_size > app.config.image_max_size) ||
+        (total_size > (app.target_slot_size - BOOT_IMAGE_PAYLOAD_OFFSET)))
+    {
+        return BOOT_APP_OVERFLOW;
+    }
+
+    erase_length = align_up(BOOT_IMAGE_PAYLOAD_OFFSET + total_size,
+                            app.config.erase_size);
+    if ((erase_length < total_size) || (erase_length > app.target_slot_size))
+    {
+        return BOOT_APP_OVERFLOW;
+    }
+    if (app.ops->storage_erase(app.ops->context,
+                               app.target_slot,
+                               0U,
+                               erase_length) != BOOT_APP_OK)
+    {
+        return BOOT_APP_IO_ERROR;
+    }
+
+    app.expected_size = total_size;
+    app.storage_erased = 1U;
+    APP_LOG("slot %u erased: %lu bytes\r\n",
+            (unsigned)app.target_slot,
+            (unsigned long)erase_length);
+    return BOOT_APP_OK;
+}
+
+static boot_app_status_t handle_data_frame(uint32_t remaining,
+                                           uint16_t payload_length)
+{
+    uint32_t total_from_frame;
+    boot_app_status_t status;
+
+    if ((app.state != BOOT_APP_STATE_WAIT_DATA) &&
+        (app.state != BOOT_APP_STATE_RECEIVING))
+    {
+        return BOOT_APP_PROTOCOL_ERROR;
+    }
+
+    /* 每一包推导出的固件总长度都必须与首包一致。 */
+    total_from_frame = app.received_size + payload_length + remaining;
+    if (!app.storage_erased)
+    {
+        status = prepare_storage(total_from_frame);
+        if (status != BOOT_APP_OK)
+        {
+            return status;
+        }
+    }
+    if ((total_from_frame != app.expected_size) ||
+        ((app.received_size + payload_length) > app.expected_size))
+    {
+        return BOOT_APP_PROTOCOL_ERROR;
+    }
+
+    status = app.ops->storage_write(app.ops->context,
+                                    app.target_slot,
+                                    BOOT_IMAGE_PAYLOAD_OFFSET + app.received_size,
+                                    app.payload,
+                                    payload_length);
+    if (status != BOOT_APP_OK)
+    {
+        return BOOT_APP_IO_ERROR;
+    }
+
+    app.running_crc_state = boot_crc32_update(app.running_crc_state,
+                                              app.payload,
+                                              payload_length);
+    app.received_size += payload_length;
+    app.last_activity_ms = now_ms();
+    app.state = (remaining == 0U) ? BOOT_APP_STATE_WAIT_FINISH
+                                  : BOOT_APP_STATE_RECEIVING;
+
+    status = app.ops->transport_write(app.ops->context, app_ack, sizeof(app_ack));
+    return (status == BOOT_APP_OK) ? BOOT_APP_OK : BOOT_APP_IO_ERROR;
+}
+
+static boot_app_status_t verify_payload(uint32_t expected_crc)
+{
+    uint32_t offset = 0U;
+    uint32_t crc_state = 0xFFFFFFFFUL;
+
+    /* 从外部 Flash 回读整包，不能只相信接收过程中的 CRC。 */
+    while (offset < app.received_size)
+    {
+        uint32_t chunk = app.received_size - offset;
+        if (chunk > sizeof(app.payload))
+        {
+            chunk = sizeof(app.payload);
+        }
+        if (app.ops->storage_read(app.ops->context,
+                                  app.target_slot,
+                                  BOOT_IMAGE_PAYLOAD_OFFSET + offset,
+                                  app.payload,
+                                  chunk) != BOOT_APP_OK)
+        {
+            return BOOT_APP_IO_ERROR;
+        }
+        crc_state = boot_crc32_update(crc_state, app.payload, chunk);
+        offset += chunk;
+    }
+    return (boot_crc32_finish(crc_state) == expected_crc)
+               ? BOOT_APP_OK
+               : BOOT_APP_VERIFY_ERROR;
+}
+
+static boot_app_status_t commit_image(uint32_t version, uint32_t build_date)
+{
+    uint8_t raw_header[BOOT_IMAGE_HEADER_SIZE];
+    uint8_t commit_word[4];
+    boot_image_info_t image;
+    boot_image_info_t decoded;
+    boot_control_storage_t control_storage;
+    boot_app_status_t status;
+
+    memset(&image, 0, sizeof(image));
+    image.target_address = app.config.target_address;
+    image.firmware_version = version;
+    image.build_date = build_date;
+    image.payload_offset = BOOT_IMAGE_PAYLOAD_OFFSET;
+    image.payload_size = app.received_size;
+    image.payload_crc32 = boot_crc32_finish(app.running_crc_state);
+
+    status = verify_payload(image.payload_crc32);
+    if (status != BOOT_APP_OK)
+    {
+        return status;
+    }
+
+    boot_image_header_encode(&image, raw_header);
+    /* 镜像头提交标记最后写，写到一半的镜像不会被采用。 */
+    status = app.ops->storage_write(app.ops->context,
+                                    app.target_slot,
+                                    0U,
+                                    raw_header,
+                                    IMAGE_HEADER_COMMIT_OFFSET);
+    if (status != BOOT_APP_OK)
+    {
+        return BOOT_APP_IO_ERROR;
+    }
+
+    put_u32_le(commit_word, BOOT_IMAGE_COMMIT_MARKER);
+    status = app.ops->storage_write(app.ops->context,
+                                    app.target_slot,
+                                    IMAGE_HEADER_COMMIT_OFFSET,
+                                    commit_word,
+                                    sizeof(commit_word));
+    if (status != BOOT_APP_OK)
+    {
+        return BOOT_APP_IO_ERROR;
+    }
+
+    if ((app.ops->storage_read(app.ops->context,
+                               app.target_slot,
+                               0U,
+                               raw_header,
+                               sizeof(raw_header)) != BOOT_APP_OK) ||
+        !boot_image_header_decode(raw_header, &decoded) ||
+        (decoded.target_address != image.target_address) ||
+        (decoded.payload_size != image.payload_size) ||
+        (decoded.payload_crc32 != image.payload_crc32))
+    {
+        return BOOT_APP_VERIFY_ERROR;
+    }
+
+    image.header_crc32 = decoded.header_crc32;
+    control_storage = bcb_storage();
+    if (boot_control_free_record_count(&control_storage) <
+        BOOT_CONTROL_UPDATE_RECORD_RESERVE)
+    {
+        return BOOT_APP_BUSY;
+    }
+    status = app.ops->mark_update_ready(app.ops->context,
+                                        app.target_slot,
+                                        &image);
+    if (status != BOOT_APP_OK)
+    {
+        return status;
+    }
+
+    app.state = BOOT_APP_STATE_READY;
+    app.last_error = BOOT_APP_OK;
+    status = app.ops->transport_write(app.ops->context, app_ack, sizeof(app_ack));
+    if (status != BOOT_APP_OK)
+    {
+        return BOOT_APP_IO_ERROR;
+    }
+
+    APP_LOG("slot %u ready: size=%lu crc=0x%08lX version=%lu\r\n",
+            (unsigned)app.target_slot,
+            (unsigned long)image.payload_size,
+            (unsigned long)image.payload_crc32,
+            (unsigned long)image.firmware_version);
+    if (app.config.auto_reset && (app.ops->system_reset != NULL))
+    {
+        app.ops->system_reset(app.ops->context);
+    }
+    return BOOT_APP_OK;
+}
+
+static bool extract_finish_frame(uint32_t *version, uint32_t *build_date)
+{
+    if (app.rx_length < FINISH_FRAME_SIZE)
+    {
+        return false;
+    }
+    if ((app.rx_cache[0] != FRAME_HEADER0) ||
+        (app.rx_cache[1] != FRAME_HEADER1) ||
+        (app.rx_cache[10] != COMMAND_FINISH0) ||
+        (app.rx_cache[11] != COMMAND_FINISH1) ||
+        (app.rx_cache[12] != FRAME_TAIL0) ||
+        (app.rx_cache[13] != FRAME_TAIL1))
+    {
+        consume(1U);
+        return false;
+    }
+    *version = get_u32_be(&app.rx_cache[2]);
+    *build_date = get_u32_be(&app.rx_cache[6]);
+    consume(FINISH_FRAME_SIZE);
+    return true;
+}
+
+static void process_idle_commands(void)
+{
+    while (app.rx_length >= COMMAND_FRAME_SIZE)
+    {
+        if (command_at_front(COMMAND_QUERY_VERSION0, COMMAND_QUERY_VERSION1))
+        {
+            consume(COMMAND_FRAME_SIZE);
+            send_text_u32("version:", app.config.running_version);
+        }
+        else if (command_at_front(COMMAND_QUERY_DATE0, COMMAND_QUERY_DATE1))
+        {
+            consume(COMMAND_FRAME_SIZE);
+            send_date(app.config.running_build_date);
+        }
+        else if (command_at_front(COMMAND_START0, COMMAND_START1))
+        {
+            boot_app_status_t status;
+
+            consume(COMMAND_FRAME_SIZE);
+            reset_session(BOOT_APP_STATE_WAIT_DATA);
+            status = select_target_slot();
+            if (status != BOOT_APP_OK)
+            {
+                fail(status);
+                return;
+            }
+            (void)app.ops->transport_write(app.ops->context,
+                                           app_ack,
+                                           sizeof(app_ack));
+            APP_LOG("update session started, target slot=%u\r\n",
+                    (unsigned)app.target_slot);
+            return;
+        }
+        else
+        {
+            consume(1U);
+        }
+    }
+}
+
+void easy_bootloader_app_get_default_config(boot_app_config_t *config)
+{
+    if (config == NULL)
+    {
+        return;
+    }
+    memset(config, 0, sizeof(*config));
+    config->target_address = BOOT_APP_DEFAULT_TARGET_ADDRESS;
+    config->image_max_size = BOOT_APP_DEFAULT_IMAGE_MAX_SIZE;
+    config->slot_a_size = BOOT_APP_DEFAULT_SLOT_A_SIZE;
+    config->slot_b_size = BOOT_APP_DEFAULT_SLOT_B_SIZE;
+    config->erase_size = BOOT_APP_DEFAULT_ERASE_SIZE;
+    config->bcb_region_size = BOOT_APP_DEFAULT_BCB_REGION_SIZE;
+    config->session_timeout_ms = BOOT_APP_DEFAULT_TIMEOUT_MS;
+    config->auto_reset = 1U;
+}
+
+boot_app_status_t easy_bootloader_app_init(const boot_app_config_t *config,
+                                           const boot_app_ops_t *ops)
+{
+    if ((config == NULL) || (ops == NULL) ||
+        (ops->transport_read == NULL) || (ops->transport_write == NULL) ||
+        (ops->read_boot_control == NULL) ||
+        (ops->bcb_read == NULL) || (ops->bcb_program == NULL) ||
+        (ops->bcb_erase == NULL) ||
+        (ops->storage_erase == NULL) || (ops->storage_write == NULL) ||
+        (ops->storage_read == NULL) || (ops->mark_update_ready == NULL) ||
+        (ops->mark_confirmed == NULL) ||
+        (config->erase_size == 0U) || (config->image_max_size == 0U) ||
+        (config->bcb_region_size < BOOT_CONTROL_RECORD_SIZE) ||
+        ((config->bcb_region_size % BOOT_CONTROL_RECORD_SIZE) != 0U) ||
+        (config->slot_a_size <= BOOT_IMAGE_PAYLOAD_OFFSET) ||
+        (config->slot_b_size <= BOOT_IMAGE_PAYLOAD_OFFSET) ||
+        (config->image_max_size >
+         (config->slot_a_size - BOOT_IMAGE_PAYLOAD_OFFSET)) ||
+        (config->image_max_size >
+         (config->slot_b_size - BOOT_IMAGE_PAYLOAD_OFFSET)))
+    {
+        return BOOT_APP_INVALID_ARGUMENT;
+    }
+
+    memset(&app, 0, sizeof(app));
+    app.config = *config;
+    app.ops = ops;
+    app.initialized = 1U;
+    reset_session(BOOT_APP_STATE_IDLE);
+    APP_LOG("easy bootloader app downloader ready\r\n");
+    return BOOT_APP_OK;
 }
 
 void easy_bootloader_app_run(void)
 {
-    if (!g_app_ctx.initialized) {
+    uint32_t space;
+    uint32_t received;
+
+    if (!app.initialized)
+    {
         return;
     }
 
-    app_poll_data();
-
-    bl_app_cmd_t cmd = app_check_dataframe();
-
-    switch (cmd) {
-        case BL_APP_CMD_QUERY_VERSION:
-            app_handle_query_version();
-            break;
-
-        case BL_APP_CMD_QUERY_DATE:
-            app_handle_query_date();
-            break;
-
-        case BL_APP_CMD_START_FLASH:
-            app_handle_start_flash();
-            break;
-
-        case BL_APP_CMD_NONE:
-        default:
-            break;
-    }
-}
-
-static void app_reset_context(void)
-{
-    memset(&g_app_ctx, 0, sizeof(g_app_ctx));
-}
-
-static void app_read_flag_region(void)
-{
-    if (g_boot_app_ops->boot_port_app_flash_read(BOOT_APP_FLAG_ADDR, (uint8_t *)&g_app_ctx.boot_flag, 4U) != BOOT_PORT_APP_OK ||
-        g_boot_app_ops->boot_port_app_flash_read(BOOT_APP_VERSION_ADDR, (uint8_t *)&g_app_ctx.app_version, 4U) != BOOT_PORT_APP_OK ||
-        g_boot_app_ops->boot_port_app_flash_read(BOOT_APP_DATE_ADDR, (uint8_t *)&g_app_ctx.update_date, 4U) != BOOT_PORT_APP_OK) {
-        g_app_ctx.boot_flag = BOOT_FLAG_ERASED;
-        g_app_ctx.app_version = BOOT_FLAG_ERASED;
-        g_app_ctx.update_date = BOOT_FLAG_ERASED;
-        BOOT_APP_LOG("Read flag region failed, fallback to erased defaults\r\n");
-    }
-}
-
-static void app_poll_data(void)
-{
-    // 计算 rx_cache 剩余空间
-    uint32_t space = sizeof(g_app_ctx.rx_cache) - g_app_ctx.rx_cache_len;
-    if (space == 0U) {
-        return;  // 缓存已满，等待解析消费
+    space = sizeof(app.rx_cache) - app.rx_length;
+    if (space > 0U)
+    {
+        received = app.ops->transport_read(app.ops->context,
+                                           &app.rx_cache[app.rx_length],
+                                           space);
+        if (received > space)
+        {
+            fail(BOOT_APP_OVERFLOW);
+            return;
+        }
+        if (received > 0U)
+        {
+            app.rx_length = (uint16_t)(app.rx_length + received);
+            app.last_activity_ms = now_ms();
+        }
     }
 
-    // 直接从底层读取数据到线性解析缓存
-    uint32_t received = g_boot_app_ops->boot_port_app_data_read(
-        &g_app_ctx.rx_cache[g_app_ctx.rx_cache_len],
-        space
-    );
-
-    if (received > 0U) {
-        g_app_ctx.rx_cache_len += (uint16_t)received;
-    }
-}
-
-static void app_consume_cache(uint16_t count)
-{
-    if (count >= g_app_ctx.rx_cache_len) {
-        g_app_ctx.rx_cache_len = 0U;
+    if ((app.state == BOOT_APP_STATE_IDLE) ||
+        (app.state == BOOT_APP_STATE_READY) ||
+        (app.state == BOOT_APP_STATE_ERROR))
+    {
+        process_idle_commands();
         return;
     }
 
-    uint16_t remain = g_app_ctx.rx_cache_len - count;
-    memmove(g_app_ctx.rx_cache, &g_app_ctx.rx_cache[count], remain);
-    g_app_ctx.rx_cache_len = remain;
-}
-
-/**
- * @brief 解析数据帧，识别命令类型
- * @return 命令类型
- */
-static bl_app_cmd_t app_check_dataframe(void)
-{
-    /* 最小帧长度检查 */
-    if (g_app_ctx.rx_cache_len < CMD_QUERY_VERSION_LEN) {
-        return BL_APP_CMD_NONE;
-    }
-
-    /* 查找帧头 */
-    while (g_app_ctx.rx_cache_len >= CMD_QUERY_VERSION_LEN) {
-        if (g_app_ctx.rx_cache[0] != BOOT_FRAME_HEADER0 ||
-            g_app_ctx.rx_cache[1] != BOOT_FRAME_HEADER1) {
-            app_consume_cache(1U);
-            continue;
-        }
-
-        /* 检查查询版本命令: 55 AA FF DD 55 55 (6字节) */
-        if (g_app_ctx.rx_cache[2] == CMD_QUERY_VERSION_BYTE0 &&
-            g_app_ctx.rx_cache[3] == CMD_QUERY_VERSION_BYTE1 &&
-            g_app_ctx.rx_cache[4] == BOOT_FRAME_TAIL0 &&
-            g_app_ctx.rx_cache[5] == BOOT_FRAME_TAIL1) {
-            app_consume_cache(CMD_QUERY_VERSION_LEN);
-            return BL_APP_CMD_QUERY_VERSION;
-        }
-
-        /* 检查查询更新时间命令: 55 AA FF CC 55 55 (6字节) */
-        if (g_app_ctx.rx_cache[2] == CMD_QUERY_DATE_BYTE0 &&
-            g_app_ctx.rx_cache[3] == CMD_QUERY_DATE_BYTE1 &&
-            g_app_ctx.rx_cache[4] == BOOT_FRAME_TAIL0 &&
-            g_app_ctx.rx_cache[5] == BOOT_FRAME_TAIL1) {
-            app_consume_cache(CMD_QUERY_DATE_LEN);
-            return BL_APP_CMD_QUERY_DATE;
-        }
-
-        /* 检查触发升级命令: 55 AA FF EE 55 55 (6字节，简化版) */
-        if (g_app_ctx.rx_cache[2] == CMD_START_FLASH_BYTE0 &&
-            g_app_ctx.rx_cache[3] == CMD_START_FLASH_BYTE1 &&
-            g_app_ctx.rx_cache[4] == BOOT_FRAME_TAIL0 &&
-            g_app_ctx.rx_cache[5] == BOOT_FRAME_TAIL1) {
-            app_consume_cache(CMD_START_FLASH_LEN);
-            return BL_APP_CMD_START_FLASH;
-        }
-
-        /* 帧头匹配但命令不匹配，跳过帧头继续查找 */
-        app_consume_cache(2U);
-    }
-
-    return BL_APP_CMD_NONE;
-}
-
-/**
- * @brief 发送字符串到串口
- * @param str 要发送的字符串
- */
-static void app_send_string(const char *str)
-{
-    g_boot_app_ops->boot_port_app_data_write((const uint8_t *)str, strlen(str));
-}
-
-/**
- * @brief 简单的整数转字符串
- * @param value 整数值
- * @param buf   输出缓冲区
- * @param width 最小宽度，不足补0
- */
-static void app_uint_to_str(uint32_t value, char *buf, uint8_t width)
-{
-    char temp[12];
-    int i = 0;
-
-    if (value == 0) {
-        temp[i++] = '0';
-    } else {
-        while (value > 0) {
-            temp[i++] = '0' + (value % 10);
-            value /= 10;
-        }
-    }
-
-    /* 补0 */
-    while (i < width) {
-        temp[i++] = '0';
-    }
-
-    /* 反转 */
-    for (int j = 0; j < i; j++) {
-        buf[j] = temp[i - 1 - j];
-    }
-    buf[i] = '\0';
-}
-
-/**
- * @brief 处理查询版本命令
- */
-static void app_handle_query_version(void)
-{
-    BOOT_APP_LOG("Query version command received\r\n");
-
-    /* 格式化版本号: version:xx */
-    char buf[32];
-    char num_str[12];
-
-    strcpy(buf, "version:");
-    app_uint_to_str(g_app_ctx.app_version, num_str, 1);
-    strcat(buf, num_str);
-    strcat(buf, "\r\n");
-
-    app_send_string(buf);
-    BOOT_APP_LOG("Version: %lu\r\n", (unsigned long)g_app_ctx.app_version);
-}
-
-/**
- * @brief 处理查询更新时间命令
- */
-static void app_handle_query_date(void)
-{
-    BOOT_APP_LOG("Query date command received\r\n");
-
-    /* 解析日期: 0xYYYYMMDD -> YYYY-MM-DD */
-    uint32_t date = g_app_ctx.update_date;
-    uint16_t year = (date >> 16) & 0xFFFF;
-    uint8_t month = (date >> 8) & 0xFF;
-    uint8_t day = date & 0xFF;
-
-    /* 格式化: YYYY-MM-DD */
-    char buf[32];
-    char num_str[8];
-
-    app_uint_to_str(year, num_str, 4);
-    strcpy(buf, num_str);
-    strcat(buf, "-");
-
-    app_uint_to_str(month, num_str, 2);
-    strcat(buf, num_str);
-    strcat(buf, "-");
-
-    app_uint_to_str(day, num_str, 2);
-    strcat(buf, num_str);
-    strcat(buf, "\r\n");
-
-    app_send_string(buf);
-    BOOT_APP_LOG("Date: %s", buf);
-}
-
-/**
- * @brief 处理触发升级命令
- * @note  简化版：直接进入升级模式，不再比较版本号
- *        版本信息由上位机在完成帧中携带，Bootloader 端写入
- */
-static void app_handle_start_flash(void)
-{
-    BOOT_APP_LOG("Start flash command received\r\n");
-    BOOT_APP_LOG("Entering bootloader mode...\r\n");
-
-    /* 发送 ACK 应答 */
-    g_boot_app_ops->boot_port_app_data_write(g_boot_ack, sizeof(g_boot_ack));
-    BOOT_APP_LOG("ACK sent\r\n");
-
-    /* 只写入 flag=1，不写版本号和日期 */
-    boot_port_app_status_t status = app_write_flag_only(BOOT_FLAG_BOOTLOADER);
-    if (status != BOOT_PORT_APP_OK) {
-        BOOT_APP_LOG("Write flag failed\r\n");
+    if ((app.config.session_timeout_ms != 0U) &&
+        (app.ops->get_time_ms != NULL) &&
+        ((uint32_t)(now_ms() - app.last_activity_ms) >=
+         app.config.session_timeout_ms))
+    {
+        fail(BOOT_APP_TIMEOUT);
         return;
     }
 
-    BOOT_APP_LOG("Flag set to BOOTLOADER, resetting...\r\n");
+    if (app.state == BOOT_APP_STATE_WAIT_FINISH)
+    {
+        uint32_t version;
+        uint32_t build_date;
+        if (extract_finish_frame(&version, &build_date))
+        {
+            boot_app_status_t status = commit_image(version, build_date);
+            if (status != BOOT_APP_OK)
+            {
+                fail(status);
+            }
+        }
+        return;
+    }
 
-    /* 短暂延时确保 ACK 和日志发送完成 */
-    for (volatile uint32_t i = 0; i < 100000; i++);
+    while ((app.state == BOOT_APP_STATE_WAIT_DATA) ||
+           (app.state == BOOT_APP_STATE_RECEIVING))
+    {
+        uint32_t remaining;
+        uint16_t payload_length;
+        boot_app_status_t status;
 
-    /* 系统复位，进入 Bootloader 模式 */
-    g_boot_app_ops->boot_port_app_system_reset();
+        if (!extract_data_frame(&remaining, &payload_length))
+        {
+            break;
+        }
+        status = handle_data_frame(remaining, payload_length);
+        if (status != BOOT_APP_OK)
+        {
+            fail(status);
+            break;
+        }
+    }
 }
 
-/**
- * @brief 只写入启动标志位
- * @param flag 启动标志
- * @return 操作状态
- * @note  不写入版本号和日期，保持原有值或擦除状态
- */
-static boot_port_app_status_t app_write_flag_only(uint32_t flag)
+void easy_bootloader_app_abort(void)
 {
-    /* 先擦除标志位区 */
-    boot_port_app_status_t status = g_boot_app_ops->boot_port_app_flash_erase(BOOT_APP_FLAG_REGION_ADDR, BOOT_APP_FLAG_REGION_SIZE);
-    if (status != BOOT_PORT_APP_OK) {
-        BOOT_APP_LOG("Erase flag region failed\r\n");
+    if (app.initialized)
+    {
+        app.rx_length = 0U;
+        reset_session(BOOT_APP_STATE_IDLE);
+    }
+}
+
+void easy_bootloader_app_get_progress(boot_app_progress_t *progress)
+{
+    if (progress == NULL)
+    {
+        return;
+    }
+    progress->state = app.state;
+    progress->last_error = app.last_error;
+    progress->received_size = app.received_size;
+    progress->expected_size = app.expected_size;
+    progress->payload_crc32 = boot_crc32_finish(app.running_crc_state);
+    progress->target_slot = app.target_slot;
+}
+
+boot_app_status_t easy_bootloader_app_confirm_running(void)
+{
+    boot_control_status_t control;
+    boot_app_status_t status;
+
+    if ((!app.initialized) || (app.ops == NULL))
+    {
+        return BOOT_APP_ERROR;
+    }
+
+    memset(&control, 0, sizeof(control));
+    status = app.ops->read_boot_control(app.ops->context, &control);
+    if (status != BOOT_APP_OK)
+    {
         return status;
     }
+    if (control.state == BOOT_CONTROL_CONFIRMED)
+    {
+        return BOOT_APP_OK;
+    }
+    if ((control.state != BOOT_CONTROL_TRIAL) ||
+        !boot_control_is_slot_valid(control.pending_slot) ||
+        (control.image_size == 0U))
+    {
+        return BOOT_APP_BUSY;
+    }
 
-    /* 只写入 flag */
-    uint8_t buf[4];
-    buf[0] = (uint8_t)(flag & 0xFFU);
-    buf[1] = (uint8_t)((flag >> 8) & 0xFFU);
-    buf[2] = (uint8_t)((flag >> 16) & 0xFFU);
-    buf[3] = (uint8_t)((flag >> 24) & 0xFFU);
-
-    return g_boot_app_ops->boot_port_app_flash_write(BOOT_APP_FLAG_ADDR, buf, 4U);
+    /* 试运行确认后，pending_slot 才成为新的 confirmed_slot。 */
+    control.state = BOOT_CONTROL_CONFIRMED;
+    control.confirmed_slot = control.pending_slot;
+    control.confirmed_version = control.pending_version;
+    control.pending_slot = BOOT_SLOT_NONE;
+    control.pending_version = 0U;
+    control.boot_attempts = 0U;
+    control.max_boot_attempts = 0U;
+    control.last_error = 0U;
+    return app.ops->mark_confirmed(app.ops->context, &control);
 }

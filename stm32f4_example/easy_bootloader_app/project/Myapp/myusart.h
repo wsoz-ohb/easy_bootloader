@@ -6,7 +6,6 @@
 
 int uart_printf(UART_HandleTypeDef* huart, const char* format, ...) ;
 void uart1_task(void);
-void uart2_task(void);
 void myusart_init(void);
 
 #endif

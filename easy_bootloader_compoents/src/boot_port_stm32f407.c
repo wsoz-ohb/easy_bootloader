@@ -1,224 +1,478 @@
 #include "boot_config.h"
 #include "easy_bootloader.h"
+
 #include "main.h"
-#include "ringbuffer.h"
-#include <string.h>
+#include "W25QXX_driver.h"
+
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
-/* 外部变量声明 */
 extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart2;
-extern DMA_HandleTypeDef hdma_usart2_rx;
-extern struct rt_ringbuffer uart2_ringbuffer_struct;
+extern UART_HandleTypeDef huart5;
 
-/* STM32F407 Flash 扇区信息 */
-typedef struct {
-    uint32_t start_addr;
-    uint32_t size;
-    uint32_t sector_id;
-} flash_sector_t;
-
-static const flash_sector_t flash_sectors[] = {
-    {0x08000000, 0x4000,  FLASH_SECTOR_0},   // 16KB
-    {0x08004000, 0x4000,  FLASH_SECTOR_1},   // 16KB
-    {0x08008000, 0x4000,  FLASH_SECTOR_2},   // 16KB
-    {0x0800C000, 0x4000,  FLASH_SECTOR_3},   // 16KB
-    {0x08010000, 0x10000, FLASH_SECTOR_4},   // 64KB  - APP 起始
-    {0x08020000, 0x20000, FLASH_SECTOR_5},   // 128KB
-    {0x08040000, 0x20000, FLASH_SECTOR_6},   // 128KB
-    {0x08060000, 0x20000, FLASH_SECTOR_7},   // 128KB
-    {0x08080000, 0x20000, FLASH_SECTOR_8},   // 128KB
-    {0x080A0000, 0x20000, FLASH_SECTOR_9},   // 128KB
-    {0x080C0000, 0x20000, FLASH_SECTOR_10},  // 128KB
-    {0x080E0000, 0x20000, FLASH_SECTOR_11},  // 128KB - 标志区
-};
-#define FLASH_SECTOR_COUNT (sizeof(flash_sectors) / sizeof(flash_sectors[0]))
-
-
-uint32_t boot_port_get_tick(void)
+typedef struct
 {
-    return HAL_GetTick();
+    uint32_t start_address;
+    uint32_t size;
+    uint32_t sector;
+} stm32_flash_sector_t;
+
+static const stm32_flash_sector_t stm32_flash_sectors[] =
+{
+    {0x08000000UL, 0x00004000UL, FLASH_SECTOR_0},
+    {0x08004000UL, 0x00004000UL, FLASH_SECTOR_1},
+    {0x08008000UL, 0x00004000UL, FLASH_SECTOR_2},
+    {0x0800C000UL, 0x00004000UL, FLASH_SECTOR_3},
+    {0x08010000UL, 0x00010000UL, FLASH_SECTOR_4},
+    {0x08020000UL, 0x00020000UL, FLASH_SECTOR_5},
+    {0x08040000UL, 0x00020000UL, FLASH_SECTOR_6},
+    {0x08060000UL, 0x00020000UL, FLASH_SECTOR_7},
+    {0x08080000UL, 0x00020000UL, FLASH_SECTOR_8},
+    {0x080A0000UL, 0x00020000UL, FLASH_SECTOR_9},
+    {0x080C0000UL, 0x00020000UL, FLASH_SECTOR_10},
+    {0x080E0000UL, 0x00020000UL, FLASH_SECTOR_11},
+};
+
+#define STM32_FLASH_SECTOR_COUNT \
+    (sizeof(stm32_flash_sectors) / sizeof(stm32_flash_sectors[0]))
+
+static uint8_t external_flash_ready;
+
+static void service_watchdog(void *context)
+{
+    (void)context;
+    /* 示例未启用 IWDG，产品可在此喂狗。 */
 }
 
-/* 根据地址获取扇区索引 */
-static int get_sector_index(uint32_t addr)
+static bool is_range_valid(uint32_t address,
+                           uint32_t length,
+                           uint32_t region_start,
+                           uint32_t region_size)
 {
-    for (int i = 0; i < FLASH_SECTOR_COUNT; i++) {
-        if (addr >= flash_sectors[i].start_addr &&
-            addr < flash_sectors[i].start_addr + flash_sectors[i].size) {
-            return i;
+    return (address >= region_start) &&
+           (length <= region_size) &&
+           ((address - region_start) <= (region_size - length));
+}
+
+static int sector_index_from_address(uint32_t address)
+{
+    uint32_t index;
+
+    for (index = 0U; index < STM32_FLASH_SECTOR_COUNT; index++)
+    {
+        if ((address >= stm32_flash_sectors[index].start_address) &&
+            (address < (stm32_flash_sectors[index].start_address +
+                        stm32_flash_sectors[index].size)))
+        {
+            return (int)index;
         }
     }
     return -1;
 }
 
-boot_port_status_t boot_port_flash_erase(uint32_t addr, uint32_t size)
+static boot_loader_status_t erase_internal(uint32_t address, uint32_t length)
 {
-    uint32_t end_addr = addr + size;
-    FLASH_EraseInitTypeDef erase_init;
-    uint32_t sector_error = 0;
-    HAL_StatusTypeDef status;
+    FLASH_EraseInitTypeDef erase;
+    uint32_t sector_error;
+    uint32_t index;
+    int first;
+    int last;
 
-    /* 获取起始和结束扇区 */
-    int start_sector = get_sector_index(addr);
-    int end_sector = get_sector_index(end_addr - 1);
-
-    if (start_sector < 0 || end_sector < 0) {
-        return BOOT_PORT_ERROR;
+    if ((length == 0U) || ((address + length) < address))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+    first = sector_index_from_address(address);
+    last = sector_index_from_address(address + length - 1U);
+    if ((first < 0) || (last < first))
+    {
+        return BOOT_LOADER_IO_ERROR;
     }
 
-    /* 解锁 Flash */
+    /* STM32F407 按扇区擦除，请求范围覆盖到的扇区都会被擦除。 */
     HAL_FLASH_Unlock();
-
-    /* 逐个扇区擦除 */
-    for (int i = start_sector; i <= end_sector; i++) {
-        erase_init.TypeErase = FLASH_TYPEERASE_SECTORS;
-        erase_init.VoltageRange = FLASH_VOLTAGE_RANGE_3;  // 2.7V - 3.6V
-        erase_init.Sector = flash_sectors[i].sector_id;
-        erase_init.NbSectors = 1;
-
-        status = HAL_FLASHEx_Erase(&erase_init, &sector_error);
-        if (status != HAL_OK) {
+    for (index = (uint32_t)first; index <= (uint32_t)last; index++)
+    {
+        memset(&erase, 0, sizeof(erase));
+        erase.TypeErase = FLASH_TYPEERASE_SECTORS;
+        erase.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+        erase.Sector = stm32_flash_sectors[index].sector;
+        erase.NbSectors = 1U;
+        if (HAL_FLASHEx_Erase(&erase, &sector_error) != HAL_OK)
+        {
             HAL_FLASH_Lock();
-            return BOOT_PORT_ERROR;
+            return BOOT_LOADER_IO_ERROR;
         }
+        service_watchdog(NULL);
     }
-
     HAL_FLASH_Lock();
-    return BOOT_PORT_OK;
+    return BOOT_LOADER_OK;
 }
 
-boot_port_status_t boot_port_flash_write(uint32_t addr, const uint8_t *data, uint32_t len)
+static boot_loader_status_t program_internal(uint32_t address,
+                                              const uint8_t *data,
+                                              uint32_t length)
 {
-    HAL_StatusTypeDef status;
-    uint32_t i;
+    uint32_t offset;
 
-    /* 解锁 Flash */
+    if ((data == NULL) || ((address & 3U) != 0U) || ((length & 3U) != 0U))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+
     HAL_FLASH_Unlock();
-
-    /* 以 WORD (32位) 为单位写入 */
-    for (i = 0; i < len; i += 4) {
-        uint32_t word = *(uint32_t *)(data + i);
-        status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr + i, word);
-        if (status != HAL_OK) {
+    for (offset = 0U; offset < length; offset += 4U)
+    {
+        uint32_t word = (uint32_t)data[offset] |
+                        ((uint32_t)data[offset + 1U] << 8) |
+                        ((uint32_t)data[offset + 2U] << 16) |
+                        ((uint32_t)data[offset + 3U] << 24);
+        if ((HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, address + offset, word) != HAL_OK) ||
+            (*(const volatile uint32_t *)(address + offset) != word))
+        {
             HAL_FLASH_Lock();
-            return BOOT_PORT_ERROR;
+            return BOOT_LOADER_IO_ERROR;
         }
     }
-
     HAL_FLASH_Lock();
-    return BOOT_PORT_OK;
+    return BOOT_LOADER_OK;
 }
 
-boot_port_status_t boot_port_flash_read(uint32_t addr, uint8_t *data, uint32_t len)
+static boot_loader_status_t bcb_read(void *context,
+                                     uint32_t offset,
+                                     uint8_t *data,
+                                     uint32_t length)
 {
-    memcpy(data, (const void *)addr, len);
-    return BOOT_PORT_OK;
-}
-
-boot_port_status_t boot_port_data_write(const uint8_t *data, uint32_t len)
-{
-    HAL_StatusTypeDef status = HAL_UART_Transmit(&huart2, (uint8_t *)data, len, 1000);
-    return (status == HAL_OK) ? BOOT_PORT_OK : BOOT_PORT_ERROR;
-}
-
-uint32_t boot_port_data_read(uint8_t *buf, uint32_t max_len)
-{
-    return rt_ringbuffer_get(&uart2_ringbuffer_struct, buf, max_len);
-}
-
-void boot_port_log(const char *fmt, ...)
-{
-    char buffer[256];
-    va_list args;
-    va_start(args, fmt);
-    int len = vsnprintf(buffer, sizeof(buffer), fmt, args);
-    va_end(args);
-
-    if (len > 0) {
-        uint32_t tx_len = (uint32_t)len;
-        if (tx_len >= sizeof(buffer)) {
-            tx_len = sizeof(buffer) - 1U;
-        }
-        HAL_UART_Transmit(&huart1, (uint8_t *)buffer, tx_len, 100);
+    (void)context;
+    if ((data == NULL) || !is_range_valid(offset,
+                                          length,
+                                          0U,
+                                          BOOT_BCB_REGION_SIZE))
+    {
+        return BOOT_LOADER_IO_ERROR;
     }
+    memcpy(data, (const void *)(BOOT_BCB_REGION_ADDR + offset), length);
+    return BOOT_LOADER_OK;
 }
 
-void boot_port_jump_to_app(uint32_t app_addr)
+static boot_loader_status_t bcb_program(void *context,
+                                        uint32_t offset,
+                                        const uint8_t *data,
+                                        uint32_t length)
 {
-    typedef void (*pFunction)(void);
-    pFunction jump_to_app;
+    (void)context;
+    if (!is_range_valid(offset,
+                        length,
+                        0U,
+                        BOOT_BCB_REGION_SIZE))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+    return program_internal(BOOT_BCB_REGION_ADDR + offset, data, length);
+}
 
-    uint32_t app_stack = *(volatile uint32_t *)app_addr;
-    uint32_t app_reset = *(volatile uint32_t *)(app_addr + 4);
+static boot_loader_status_t bcb_erase(void *context,
+                                      uint32_t offset,
+                                      uint32_t length)
+{
+    (void)context;
+    if (!is_range_valid(offset,
+                        length,
+                        0U,
+                        BOOT_BCB_REGION_SIZE))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+    return erase_internal(BOOT_BCB_REGION_ADDR + offset, length);
+}
 
-    /* 1. 关闭全局中断 */
+static uint32_t slot_base_address(boot_slot_t slot)
+{
+    if (slot == BOOT_SLOT_A)
+    {
+        return BOOT_EXTERNAL_SLOT_A_OFFSET;
+    }
+    if (slot == BOOT_SLOT_B)
+    {
+        return BOOT_EXTERNAL_SLOT_B_OFFSET;
+    }
+    return 0U;
+}
+
+static uint32_t slot_capacity(boot_slot_t slot)
+{
+    if (slot == BOOT_SLOT_A)
+    {
+        return BOOT_EXTERNAL_SLOT_A_SIZE;
+    }
+    if (slot == BOOT_SLOT_B)
+    {
+        return BOOT_EXTERNAL_SLOT_B_SIZE;
+    }
+    return 0U;
+}
+
+static boot_loader_status_t external_read(void *context,
+                                          boot_slot_t slot,
+                                          uint32_t offset,
+                                          uint8_t *data,
+                                          uint32_t length)
+{
+    uint32_t address;
+    uint32_t capacity;
+
+    (void)context;
+    capacity = slot_capacity(slot);
+    address = slot_base_address(slot);
+    if ((external_flash_ready == 0U) || (data == NULL) || (capacity == 0U) ||
+        (length > 0xFFFFU) ||
+        !is_range_valid(offset, length, 0U, capacity))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+    return (BSP_W25Qxx_BufferRead(data, address + offset, (uint16_t)length) == W25Qx_OK) ?
+           BOOT_LOADER_OK : BOOT_LOADER_IO_ERROR;
+}
+
+static boot_loader_status_t external_erase(void *context,
+                                           boot_slot_t slot,
+                                           uint32_t offset,
+                                           uint32_t length)
+{
+    uint32_t address;
+    uint32_t capacity;
+    uint32_t current;
+    uint32_t verify_offset;
+    uint32_t index;
+    uint8_t verify_buffer[BOOT_TRANSFER_BUFFER_SIZE];
+
+    (void)context;
+    capacity = slot_capacity(slot);
+    address = slot_base_address(slot);
+    if ((external_flash_ready == 0U) || (capacity == 0U) ||
+        ((offset % 4096U) != 0U) ||
+        ((length % 4096U) != 0U) ||
+        !is_range_valid(offset, length, 0U, capacity))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+
+    for (current = 0U; current < length; current += 4096U)
+    {
+        if (BSP_W25Qxx_SectorErase(address + offset + current) != W25Qx_OK)
+        {
+            return BOOT_LOADER_IO_ERROR;
+        }
+        service_watchdog(NULL);
+        for (verify_offset = 0U; verify_offset < 4096U;
+             verify_offset += sizeof(verify_buffer))
+        {
+            if (BSP_W25Qxx_BufferRead(verify_buffer,
+                                       address + offset + current + verify_offset,
+                                       sizeof(verify_buffer)) != W25Qx_OK)
+            {
+                return BOOT_LOADER_IO_ERROR;
+            }
+            for (index = 0U; index < sizeof(verify_buffer); index++)
+            {
+                if (verify_buffer[index] != 0xFFU)
+                {
+                    return BOOT_LOADER_IO_ERROR;
+                }
+            }
+        }
+        service_watchdog(NULL);
+    }
+    return BOOT_LOADER_OK;
+}
+
+static boot_loader_status_t external_write(void *context,
+                                           boot_slot_t slot,
+                                           uint32_t offset,
+                                           const uint8_t *data,
+                                           uint32_t length)
+{
+    static uint8_t verify_buffer[BOOT_TRANSFER_BUFFER_SIZE];
+    uint32_t address;
+    uint32_t capacity;
+    uint32_t current;
+
+    (void)context;
+    capacity = slot_capacity(slot);
+    address = slot_base_address(slot);
+    if ((external_flash_ready == 0U) || (data == NULL) || (capacity == 0U) ||
+        !is_range_valid(offset, length, 0U, capacity))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+
+    for (current = 0U; current < length;)
+    {
+        uint32_t chunk = length - current;
+        if (chunk > sizeof(verify_buffer))
+        {
+            chunk = sizeof(verify_buffer);
+        }
+        if (BSP_W25Qxx_BufferWrite((uint8_t *)&data[current],
+                                   address + offset + current,
+                                   (uint16_t)chunk) != W25Qx_OK)
+        {
+            return BOOT_LOADER_IO_ERROR;
+        }
+        if ((BSP_W25Qxx_BufferRead(verify_buffer,
+                                   address + offset + current,
+                                   (uint16_t)chunk) != W25Qx_OK) ||
+            (memcmp(verify_buffer, &data[current], chunk) != 0))
+        {
+            return BOOT_LOADER_IO_ERROR;
+        }
+        current += chunk;
+    }
+    return BOOT_LOADER_OK;
+}
+
+static boot_loader_status_t app_erase(void *context,
+                                      uint32_t offset,
+                                      uint32_t length)
+{
+    (void)context;
+    if (!is_range_valid(offset, length, 0U, BOOT_APP_MAX_SIZE))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+    return erase_internal(BOOT_APP_START_ADDR + offset, length);
+}
+
+static boot_loader_status_t app_write(void *context,
+                                      uint32_t offset,
+                                      const uint8_t *data,
+                                      uint32_t length)
+{
+    (void)context;
+    if (!is_range_valid(offset, length, 0U, BOOT_APP_MAX_SIZE))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+    return program_internal(BOOT_APP_START_ADDR + offset, data, length);
+}
+
+static boot_loader_status_t app_read(void *context,
+                                     uint32_t offset,
+                                     uint8_t *data,
+                                     uint32_t length)
+{
+    (void)context;
+    if ((data == NULL) || !is_range_valid(offset, length, 0U, BOOT_APP_MAX_SIZE))
+    {
+        return BOOT_LOADER_IO_ERROR;
+    }
+    memcpy(data, (const void *)(BOOT_APP_START_ADDR + offset), length);
+    return BOOT_LOADER_OK;
+}
+
+static void jump_to_app(void *context, uint32_t app_address)
+{
+    typedef void (*app_entry_t)(void);
+    uint32_t stack_pointer;
+    uint32_t reset_handler;
+    uint32_t index;
+
+    (void)context;
+    stack_pointer = *(const volatile uint32_t *)app_address;
+    reset_handler = *(const volatile uint32_t *)(app_address + 4U);
+
+    /* 清理 Bootloader 的中断和外设状态后再切换向量表。 */
     __disable_irq();
-
-    /* 2. 关闭 SysTick */
-    SysTick->CTRL = 0;
-    SysTick->LOAD = 0;
-    SysTick->VAL = 0;
-
-    /* 3. 复位外设 - 停止 DMA 和 UART */
+    SysTick->CTRL = 0U;
+    SysTick->LOAD = 0U;
+    SysTick->VAL = 0U;
     HAL_UART_DMAStop(&huart1);
-    HAL_UART_DMAStop(&huart2);
+    HAL_UART_DMAStop(&huart5);
     HAL_UART_DeInit(&huart1);
-    HAL_UART_DeInit(&huart2);
+    HAL_UART_DeInit(&huart5);
+    HAL_DeInit();
 
-    /* 4. 清除所有中断挂起标志 */
-    for (int i = 0; i < 8; i++) {
-        NVIC->ICER[i] = 0xFFFFFFFF;  // 禁用所有中断
-        NVIC->ICPR[i] = 0xFFFFFFFF;  // 清除所有挂起中断
+    for (index = 0U; index < 8U; index++)
+    {
+        NVIC->ICER[index] = 0xFFFFFFFFUL;
+        NVIC->ICPR[index] = 0xFFFFFFFFUL;
     }
 
-    /* 5. 设置向量表偏移 */
-    SCB->VTOR = app_addr;
-
-    /* 6. 设置主栈指针 */
-    __set_MSP(app_stack);
-    __set_PSP(0U);  // 确保线程栈指针与新 APP 状态一致
-
-    /* 7. 内存屏障并重新允许中断 */
+    SCB->VTOR = app_address;
+    __set_MSP(stack_pointer);
+    __set_PSP(0U);
+    __set_CONTROL(0U);
     __DSB();
     __ISB();
-    __set_PRIMASK(0U);   // 重新开启全局中断
-    __enable_irq();      // 双保险，确保 Cortex-M 允许中断
+    /* NVIC 已全部关闭，可恢复复位态 PRIMASK 后进入 APP。 */
+    __set_PRIMASK(0U);
+    ((app_entry_t)reset_handler)();
 
-    /* 8. 跳转到 APP 复位向量 */
-    jump_to_app = (pFunction)app_reset;
-    jump_to_app();
-
-    /* 不应该执行到这里 */
-    while (1);
+    for (;;)
+    {
+    }
 }
 
-void boot_port_system_reset(void)
+static void boot_log(void *context, const char *format, ...)
 {
-    NVIC_SystemReset(); // 调用系统复位函数
+    char buffer[160];
+    va_list args;
+    int length;
+
+    (void)context;
+    va_start(args, format);
+    length = vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    if (length > 0)
+    {
+        uint32_t transmit_length = (uint32_t)length;
+        if (transmit_length >= sizeof(buffer))
+        {
+            transmit_length = sizeof(buffer) - 1U;
+        }
+        (void)HAL_UART_Transmit(&huart1, (uint8_t *)buffer, transmit_length, 100U);
+    }
 }
 
-boot_ops_t boot_port_ops = {
-    .get_tick = boot_port_get_tick,
-    .boot_port_flash_erase = boot_port_flash_erase,
-    .boot_port_flash_write = boot_port_flash_write,
-    .boot_port_flash_read = boot_port_flash_read,
-    .boot_port_data_write = boot_port_data_write,
-    .boot_port_data_read = boot_port_data_read,
-    .boot_port_log = boot_port_log,
-    .boot_port_jump_to_app = boot_port_jump_to_app,
-    .boot_port_system_reset = boot_port_system_reset,
+static const boot_loader_ops_t boot_port_ops =
+{
+    NULL,
+    bcb_read,
+    bcb_program,
+    bcb_erase,
+    external_read,
+    external_erase,
+    external_write,
+    app_erase,
+    app_write,
+    app_read,
+    service_watchdog,
+    jump_to_app,
+    boot_log,
 };
 
 void bootloader_app_init(void)
 {
-    easy_bootloader_init(&boot_port_ops);   //启动bootloader，传入ops操作集
+    boot_loader_config_t config;
+    uint32_t jedec_id;
+
+    easy_bootloader_get_default_config(&config);
+    jedec_id = BSP_W25Qxx_Read_ID();
+    if (jedec_id != 0xEF4018UL)
+    {
+        boot_log(NULL, "W25Q128 unavailable: 0x%06lX; internal App only\r\n",
+                 (unsigned long)jedec_id);
+    }
+    else
+    {
+        external_flash_ready = 1U;
+    }
+    (void)easy_bootloader_init(&config, &boot_port_ops);
 }
 
-//轮询使用easy_bootloader_run函数
 void bootloader_app_loop(void)
 {
     easy_bootloader_run();
 }
-

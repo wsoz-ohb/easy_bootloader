@@ -20,7 +20,7 @@
 **/EIDE/obj/
 **/EIDE/out/
 
-# MounRiver/WCH build products
+# Common embedded build products
 **/obj/
 
 # Common temporary files

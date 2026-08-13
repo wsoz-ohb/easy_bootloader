@@ -71,12 +71,13 @@ PACKET_SIZES = ("128", "256", "512", "1024")
 # APP 端命令帧
 CMD_QUERY_VERSION = bytes([0x55, 0xAA, 0xFF, 0xDD, 0x55, 0x55])
 CMD_QUERY_DATE = bytes([0x55, 0xAA, 0xFF, 0xCC, 0x55, 0x55])
-CMD_START_FLASH = bytes([0x55, 0xAA, 0xFF, 0xEE, 0x55, 0x55])  # 简化版触发升级命令
+CMD_START_FLASH = bytes([0x55, 0xAA, 0xFF, 0xEE, 0x55, 0x55])
 
 # Bootloader 帧固定开销: 2B 头 + 3B 剩余 + 2B 长度 + 2B 校验 + 2B 尾
 BOOT_FRAME_OVERHEAD = 11
-# 首包 ACK 等待时间（用于应对长时间擦除），后续包维持较短超时
-ACK_TIMEOUT_FIRST = 10.0
+# 开始命令、首包擦除和后续传输分别使用不同 ACK 超时
+ACK_TIMEOUT_START = 5.0
+ACK_TIMEOUT_FIRST = 60.0
 ACK_TIMEOUT_OTHERS = 5.0
 
 
@@ -268,14 +269,28 @@ class BootloaderUploader:
             return
 
         total = len(data)
-        self.logger(f"开始刷写：{self.file_path.name} ({total} 字节)")
+        self.logger(f"开始升级：{self.file_path.name} ({total} 字节)")
         self._register_listener()
 
         offset = 0
         success = True
         try:
+            # APP 先建立下载会话并选中非活动槽，再接收固件数据。
+            self._ack_buffer.clear()
+            self._ack_event.clear()
+            try:
+                self.worker.write(CMD_START_FLASH)
+                self.logger(f"启动下载会话: {hex_string(CMD_START_FLASH)}")
+            except RuntimeError as exc:
+                self.logger(f"发送启动命令失败：{exc}")
+                success = False
+
+            if success and not self._ack_event.wait(timeout=ACK_TIMEOUT_START):
+                self.logger("等待 APP 启动 ACK 超时，升级中断")
+                success = False
+
             # 阶段1：发送所有数据帧
-            while offset < total:
+            while success and offset < total:
                 chunk = data[offset : offset + self.max_payload]
                 offset += len(chunk)
                 remaining = total - offset
@@ -296,7 +311,7 @@ class BootloaderUploader:
                     break
 
                 percent = offset * 100 // total
-                self.status_cb(f"已发送 {offset}/{total} 字节 ({percent}%)")
+                self.status_cb(f"已下载 {offset}/{total} 字节 ({percent}%)")
 
             # 阶段2：发送完成帧
             if success and offset == total:
@@ -322,7 +337,7 @@ class BootloaderUploader:
 
         final_ok = success and offset == total
         if final_ok:
-            self.logger("升级完成，设备即将重启运行新固件")
+            self.logger("固件已提交，设备将复位并由 Bootloader 安装")
             self.status_cb("升级完成")
         elif not success:
             self.logger("刷写失败")
@@ -457,7 +472,7 @@ class SerialTerminal(tk.Tk):
 
     def __init__(self) -> None:
         super().__init__()
-        self.title("Easy Bootloader 串口终端 v2.0.1")
+        self.title("Easy Bootloader 串口终端 v2.1.0")
         self.geometry("1150x760")
         self.minsize(1020, 660)
 
@@ -586,7 +601,7 @@ class SerialTerminal(tk.Tk):
         ttk.Entry(ver_frame, textvariable=self.new_version_var, width=8).pack(side="left", padx=(4, 0))
         ttk.Label(ver_frame, text="(刷写完成后写入)", foreground="gray").pack(side="left", padx=(4, 0))
 
-        self.flash_btn = ttk.Button(boot_frame, text="开始刷写", command=self._start_bin_upload)
+        self.flash_btn = ttk.Button(boot_frame, text="开始升级", command=self._start_bin_upload)
         self.flash_btn.grid(row=4, column=0, padx=4, pady=2, sticky="we")
         ttk.Label(
             boot_frame, textvariable=self.boot_status_var, wraplength=180, foreground="gray"
@@ -604,11 +619,6 @@ class SerialTerminal(tk.Tk):
         )
         ttk.Button(cmd_frame, text="查询日期", command=self._send_query_date).grid(
             row=0, column=1, padx=(2, 4), pady=(6, 4), sticky="we"
-        )
-
-        # 触发升级按钮单独一行
-        ttk.Button(cmd_frame, text="触发升级 (进入Bootloader模式)", command=self._send_start_flash).grid(
-            row=1, column=0, columnspan=2, padx=4, pady=(4, 6), sticky="we"
         )
 
         for child in settings_frame.winfo_children():
@@ -686,8 +696,7 @@ class SerialTerminal(tk.Tk):
         except ValueError:
             self.bootloader.version = 1
         # 设置日期（自动使用当前日期）
-        now = time.localtime()
-        self.bootloader.date = (now.tm_year << 16) | (now.tm_mon << 8) | now.tm_mday
+        self.bootloader.date = int(time.strftime("%Y%m%d"), 16)
 
         self.flash_btn.configure(state="disabled")
         self.bootloader.start()
@@ -724,18 +733,6 @@ class SerialTerminal(tk.Tk):
         try:
             self.worker.write(CMD_QUERY_DATE)
             self._log_line(f"[TX] 查询日期: {hex_string(CMD_QUERY_DATE)}", highlight=True)
-        except RuntimeError as exc:
-            messagebox.showerror("错误", str(exc))
-
-    def _send_start_flash(self) -> None:
-        """发送触发升级命令（简化版，不携带版本/日期）"""
-        if not self.worker.serial:
-            messagebox.showwarning("提示", "请先打开串口")
-            return
-
-        try:
-            self.worker.write(CMD_START_FLASH)
-            self._log_line(f"[TX] 触发升级: {hex_string(CMD_START_FLASH)}", highlight=True)
         except RuntimeError as exc:
             messagebox.showerror("错误", str(exc))
 

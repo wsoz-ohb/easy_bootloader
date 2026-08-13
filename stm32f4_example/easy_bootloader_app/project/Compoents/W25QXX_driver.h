@@ -66,18 +66,16 @@
 
 uint8_t BSP_W25Qxx_Read_Byte(void);
 uint8_t BSP_W25Qxx_Write_Byte(uint8_t Tx_Byte);
-void BSP_W25Qxx_WriteEnable(void);
-static void BSP_W25Qxx_Wait_for_Write_End(void);
+uint8_t BSP_W25Qxx_WriteEnable(void);
 
 uint32_t BSP_W25Qxx_Read_ID(void);
 uint8_t BSP_W25Qxx_BufferRead(uint8_t *ReadBuffer, uint32_t ReadAddr, uint16_t NumByteToRead);
 
-void BSP_W25Qxx_PageWrite(uint8_t *WriteBuffer, uint32_t WriteAddr, uint16_t NumByteToWrite);
-void BSP_W25Qxx_BufferWrite(uint8_t *WriteBuffer, uint32_t ReadAddr, uint16_t NumByteToWrite);
+uint8_t BSP_W25Qxx_PageWrite(uint8_t *WriteBuffer, uint32_t WriteAddr, uint16_t NumByteToWrite);
+uint8_t BSP_W25Qxx_BufferWrite(uint8_t *WriteBuffer, uint32_t ReadAddr, uint16_t NumByteToWrite);
 
-void BSP_W25Qxx_SectorErase(uint32_t Address);
+uint8_t BSP_W25Qxx_SectorErase(uint32_t Address);
 void BSP_W25Qxx_BlockErase(void);
 
 #endif
-
 

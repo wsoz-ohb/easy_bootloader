@@ -1,83 +1,38 @@
-//配置头文件
 #ifndef BOOT_CONFIG_H
 #define BOOT_CONFIG_H
 
 #include <stdint.h>
 
-#define BOOT_CONFIG_ENABLE_LOG        1U      // 1启用日志输出 0禁用日志输出
+#define BOOT_CONFIG_ENABLE_LOG          1U
 
-/*
- * CPU 架构选择
- * 移植时根据目标 MCU 修改
- */
-#define BOOT_ARCH_ARM_CORTEX_M        1U      // ARM Cortex-M (STM32, GD32 等)
-#define BOOT_ARCH_RISCV               2U      // RISC-V (CH32V 等)
+/* 内部 Flash：Bootloader / BCB / APP。 */
+#define BOOT_BOOTLOADER_START_ADDR      0x08000000UL
+#define BOOT_BOOTLOADER_SIZE            (48UL * 1024UL)
 
-#define BOOT_ARCH                     BOOT_ARCH_ARM_CORTEX_M  // 当前架构
+#define BOOT_BCB_REGION_ADDR            0x0800C000UL
+#define BOOT_BCB_REGION_SIZE            (16UL * 1024UL)
 
-/*
- * Flash 布局
- */
-#define BOOT_BOOTLOADER_START_ADDR    0x08000000U
-#define BOOT_BOOTLOADER_SIZE          0x00010000U
+#define BOOT_APP_START_ADDR             0x08010000UL
+#define BOOT_APP_MAX_SIZE               (960UL * 1024UL)
+#define BOOT_APP_END_ADDR               (BOOT_APP_START_ADDR + BOOT_APP_MAX_SIZE - 1UL)
 
-#define BOOT_APP_START_ADDR           0x08010000U
-#define BOOT_APP_MAX_SIZE             0x000D0000U
-#define BOOT_APP_END_ADDR             (BOOT_APP_START_ADDR + BOOT_APP_MAX_SIZE - 1U)
+/* 外部 Flash：A/B 两槽均可容纳完整 APP。 */
+#define BOOT_EXTERNAL_SLOT_A_OFFSET     (2UL * 1024UL * 1024UL)
+#define BOOT_EXTERNAL_SLOT_A_SIZE       (2UL * 1024UL * 1024UL)
+#define BOOT_EXTERNAL_SLOT_B_OFFSET     (4UL * 1024UL * 1024UL)
+#define BOOT_EXTERNAL_SLOT_B_SIZE       (1UL * 1024UL * 1024UL)
+#define BOOT_EXTERNAL_ERASE_SIZE        4096U
 
-#define BOOT_FLAG_REGION_ADDR         0x080E0000U
-#define BOOT_FLAG_REGION_SIZE         0x00020000U
+#define BOOT_TRANSFER_BUFFER_SIZE       512U
+#define BOOT_DEFAULT_MAX_BOOT_ATTEMPTS  2U
 
-/*
- * 标志位区布局 (基于 BOOT_FLAG_REGION_ADDR)
- * Word 0: bootloader_flag  - 启动标志 (1=Bootloader模式, 2=APP模式)
- * Word 1: app_version      - 应用版本号
- * Word 2: update_date      - 更新日期 (格式: 0xYYYYMMDD, 如 0x20251201)
- * Word 3: OUT_FLASH_FALG   - 外部FALSH存储版本标志（1=已经存储，2=未进行存储）
- */
-#define BOOT_FLAG_OFFSET              0x00U
-#define BOOT_VERSION_OFFSET           0x04U
-#define BOOT_DATE_OFFSET              0x08U
-#define BOOT_OUT_FLASH_FLAG_OFFSET    0x0CU
-
-#define BOOT_FLAG_ADDR                (BOOT_FLAG_REGION_ADDR + BOOT_FLAG_OFFSET)
-#define BOOT_VERSION_ADDR             (BOOT_FLAG_REGION_ADDR + BOOT_VERSION_OFFSET)
-#define BOOT_DATE_ADDR                (BOOT_FLAG_REGION_ADDR + BOOT_DATE_OFFSET)
-#define OUT_FLASH_FLAG_ADDR           (BOOT_FLAG_REGION_ADDR + BOOT_OUT_FLASH_FLAG_OFFSET)
-
-/* 标志位值定义 */
-#define BOOT_FLAG_BOOTLOADER          1U      // 停留在 Bootloader 模式
-#define BOOT_FLAG_APP                 2U      // 跳转到 APP 模式
-#define BOOT_FLAG_ERASED              0xFFFFFFFFU  // 未初始化（Flash 擦除后的值）
-#define OUT_FLASH_FLAG_READY          1U      // 外部Flash中有可用升级数据
-#define OUT_FLASH_FLAG_EMPTY          2U      // 外部Flash无可用升级数据
-
-/*
- * SRAM 范围（用于校验 APP 栈指针有效性）
- * 移植时根据目标 MCU 修改
- */
-#define BOOT_SRAM_START_ADDR          0x20000000U
-#define BOOT_SRAM_END_ADDR            0x20030000U
-
-/*
- * CCM 配置（部分 MCU 如 STM32F4 有 CCM RAM）
- * 0=无CCM, 1=有CCM
- * STM32F1/GD32/CH32 等无 CCM 的芯片设为 0
- */
-#define BOOT_HAS_CCM                  1U
+/* APP 向量表允许的 SRAM 范围。 */
+#define BOOT_SRAM_START_ADDR            0x20000000UL
+#define BOOT_SRAM_END_ADDR              0x20030000UL
+#define BOOT_HAS_CCM                    1U
 #if BOOT_HAS_CCM
-#define BOOT_CCM_START_ADDR           0x10000000U
-#define BOOT_CCM_END_ADDR             0x10010000U
+#define BOOT_CCM_START_ADDR             0x10000000UL
+#define BOOT_CCM_END_ADDR               0x10010000UL
 #endif
 
-/*
- * 协议缓冲配置
- * BOOT_PACKET_MAX_SIZE: 整帧最大长度（含帧头帧尾等固定开销 11 字节）
- * 如上位机配置 1024 字节包大小，则此值需 >= 1024
- */
-#define BOOT_PACKET_MAX_SIZE          512U
-#define BOOTLOADER_RINGBUFFER_SIZE    512U
-#define BOOT_UART_TIMEOUT_MS          5000U
-
-
-#endif // BOOT_CONFIG_H
+#endif /* BOOT_CONFIG_H */

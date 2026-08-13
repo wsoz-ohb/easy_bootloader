@@ -1,11 +1,11 @@
-# Easy Bootloader 通用框架设计文档
+# Easy Bootloader STM32F407 设计文档
 
 ## 1. 设计目标
 
-打造一个**协议固定、底层可移植**的通用 Bootloader 框架：
-- 用户只需实现底层硬件接口（Flash、串口等）
-- 应用层协议、状态机、流程控制完全复用
-- 支持不同 MCU（STM32F1/F4/H7、GD32、CH32 等）
+当前版本维护一个面向 **STM32F407（Cortex-M4）** 的 Bootloader 框架：
+- Bootloader 与 APP 分别提供固定的 STM32F407 参考实现
+- 串口协议、状态机、Flash 写入和跳转逻辑在组件库中复用
+- 板级代码只需对接 HAL、UART 和内部 Flash 接口
 
 ---
 
@@ -19,11 +19,10 @@
 │                 应用层 (easy_bootloader.c)              │
 │    协议解析 | 状态机 | 数据流写入 | 跳转逻辑 | ACK 应答   │
 ├────────────────────────────────────────────────────────┤
-│                 移植层 (boot_port.h)                    │
-│         定义底层接口，用户根据 MCU 实现                   │
+│                 STM32F407 端口层                         │
+│           Flash、UART、跳转等硬件接口                     │
 ├────────────────────────────────────────────────────────┤
-│                 底层实现 (boot_port_xxx.c)              │
-│    STM32F4 实现 | STM32F1 实现 | GD32 实现 | ...        │
+│           STM32F407 HAL/BSP 实现                         │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -35,28 +34,19 @@
 easy_bootloader_compoents/
 ├── inc/
 │   ├── easy_bootloader.h      # 应用层对外 API
-│   ├── boot_port.h            # 移植层接口定义（用户需实现）
 │   └── boot_config.h          # 配置宏定义
 ├── src/
-│   ├── easy_bootloader.c      # 应用层实现（通用，不改）
-│   └── boot_protocol.c        # 协议解析（通用，不改）
-├── ports/
-│   ├── stm32f4xx/
-│   │   └── boot_port_stm32f4.c
-│   ├── stm32f1xx/
-│   │   └── boot_port_stm32f1.c
-│   └── template/
-│       └── boot_port_template.c  # 移植模板
-├── examples/
-│   └── stm32f407_example/     # 完整示例工程
+│   ├── easy_bootloader.c      # 应用层实现
+│   └── boot_port_stm32f407.c  # STM32F407 参考实现
+├── stm32f4_example/           # 完整示例工程
 └── DESIGN.md                  # 本文档
 ```
 
 ---
 
-## 4. 移植层接口定义
+## 4. STM32F407 端口接口
 
-用户移植时**必须实现**以下接口：
+板级工程需提供或复用以下接口：
 
 ### 4.1 Flash 操作接口
 
@@ -201,22 +191,16 @@ easy_bootloader_init(&g_boot_cfg);
 
 ---
 
-## 6. 不同 MCU 的适配要点
+## 6. STM32F407 适配要点
 
-### 6.1 Flash 差异处理
+### 6.1 Flash 操作
 
-| MCU 系列 | Flash 特点 | 适配要点 |
-|----------|-----------|---------|
-| STM32F1 | 页式擦除（1KB/2KB） | 按页擦除，写入粒度 2 字节 |
-| STM32F4 | 扇区式擦除（16KB~128KB） | 按扇区擦除，写入粒度 1/2/4 字节可选 |
-| STM32H7 | 扇区式（128KB），双 Bank | 注意 Bank 切换，写入粒度 32 字节 |
-| GD32F4 | 类似 STM32F4 | 基本兼容，注意时序差异 |
-| CH32V3 | 页式擦除（256B） | 页较小，擦除频繁 |
+STM32F407 使用不等大的内部 Flash 扇区：Sector 0-3 为 16KB、Sector 4 为 64KB、Sector 5-11 为 128KB。
 
 **框架处理策略**：
-- 框架只关心"地址+长度"，不关心扇区/页的概念
-- `boot_port_flash_erase()` 由用户实现扇区/页的映射
-- 框架保证写入地址 4 字节对齐，长度 4 的倍数
+- 核心按地址和长度请求擦写
+- `boot_port_flash_erase()` 负责把请求范围映射为完整扇区
+- 核心以 4 字节对齐方式写入，最后不足 4 字节的数据以 `0xFF` 补齐
 
 ### 6.2 扇区映射表设计
 
@@ -239,25 +223,9 @@ static sector_info_t g_app_sectors[] = {
 };
 ```
 
-### 6.3 写入粒度处理
+### 6.3 写入粒度
 
-| MCU | 最小写入单位 | 框架要求 |
-|-----|-------------|---------|
-| STM32F1 | 2 字节（半字） | 框架传入 4 字节对齐数据，底层拆分 |
-| STM32F4 | 1/2/4 字节可选 | 直接使用 4 字节写入 |
-| STM32H7 | 32 字节（Flash Word） | 底层需要凑满 32 字节再写 |
-
-**STM32H7 特殊处理示例**：
-```c
-// boot_port_stm32h7.c
-static uint8_t write_buffer[32];
-static uint8_t write_buffer_len = 0;
-
-int boot_port_flash_write(uint32_t addr, const uint8_t *data, uint32_t len) {
-    // 凑满 32 字节再调用 HAL_FLASH_Program
-    // 最后 flush 时不足 32 字节用 0xFF 填充
-}
-```
+STM32F407 参考实现使用 `FLASH_TYPEPROGRAM_WORD`，每次写入 4 字节。核心已保证传给底层的地址与长度均为 4 字节对齐。
 
 ---
 
@@ -480,7 +448,7 @@ int main(void) {
     HAL_Init();
     SystemClock_Config();
     MX_GPIO_Init();
-    MX_USART2_UART_Init();
+    MX_USART3_UART_Init();  /* PD8 为 TX，PB11 为 RX */
 
     easy_bootloader_init();  // 可能直接跳转到 APP
 
@@ -496,8 +464,7 @@ int main(void) {
 
 ### Step 1: 复制模板
 ```
-复制 ports/template/boot_port_template.c
-重命名为 boot_port_xxx.c（xxx 为你的 MCU）
+从 `boot_port_stm32f407.c` 复制到板级工程，并对接实际的 HAL 句柄与引脚配置。
 ```
 
 ### Step 2: 配置参数

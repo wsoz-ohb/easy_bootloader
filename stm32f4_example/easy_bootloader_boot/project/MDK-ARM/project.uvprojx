@@ -702,9 +702,29 @@
               <FilePath>..\Compoents\easy_bootloader.c</FilePath>
             </File>
             <File>
+              <FileName>boot_image.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Compoents\boot_image.c</FilePath>
+            </File>
+            <File>
+              <FileName>boot_control.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Compoents\boot_control.c</FilePath>
+            </File>
+            <File>
               <FileName>easy_bootloader.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Compoents\easy_bootloader.h</FilePath>
+            </File>
+            <File>
+              <FileName>boot_image.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Compoents\boot_image.h</FilePath>
+            </File>
+            <File>
+              <FileName>boot_control.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Compoents\boot_control.h</FilePath>
             </File>
             <File>
               <FileName>W25QXX_driver.c</FileName>

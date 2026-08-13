@@ -1,64 +1,106 @@
-//应用层头文件
 #ifndef EASY_BOOTLOADER_H
 #define EASY_BOOTLOADER_H
 
 #include "boot_config.h"
-#include <stdbool.h>
+#include "boot_control.h"
+#include "boot_image.h"
 
-/* 协议固定字段长度: 2B头 + 3B剩余 + 2B长度 + 2B校验 + 2B尾 */
-#define BOOT_FRAME_FIXED_SIZE     11U
-/* 纯数据部分最大长度 = 整帧最大长度 - 固定部分长度 */
-#define BOOT_PAYLOAD_MAX_SIZE     (BOOT_PACKET_MAX_SIZE - BOOT_FRAME_FIXED_SIZE)
+#include <stdint.h>
 
-/* Bootloader 状态枚举 */
-typedef enum {
-    BOOT_STATE_IDLE = 0,
-    BOOT_STATE_RECEIVING,
-    BOOT_STATE_WAIT_FINISH,
-} boot_state_t;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef enum {
-    BOOT_PORT_OK = 0,
-    BOOT_PORT_ERROR = -1,
-    BOOT_PORT_TIMEOUT = -2,
-} boot_port_status_t;
-
-/*操作ops*/
-typedef struct 
+typedef enum
 {
-    uint32_t (*get_tick)(void);
-    boot_port_status_t (*boot_port_flash_erase)(uint32_t addr, uint32_t size);
-    boot_port_status_t (*boot_port_flash_write)(uint32_t addr, const uint8_t *data, uint32_t len);
-    boot_port_status_t (*boot_port_flash_read)(uint32_t addr, uint8_t *data, uint32_t len);
-    boot_port_status_t (*boot_port_data_write)(const uint8_t *data, uint32_t len);
-    uint32_t (*boot_port_data_read)(uint8_t *buf, uint32_t max_len);
-    void (*boot_port_log)(const char *fmt, ...);
-    void (*boot_port_jump_to_app)(uint32_t app_addr);
-    void (*boot_port_system_reset)(void);
-}boot_ops_t;
+    BOOT_LOADER_OK = 0,
+    BOOT_LOADER_INVALID_ARGUMENT = -1,
+    BOOT_LOADER_BCB_ERROR = -2,
+    BOOT_LOADER_IO_ERROR = -3,
+    BOOT_LOADER_IMAGE_INVALID = -4,
+    BOOT_LOADER_VERIFY_ERROR = -5,
+    BOOT_LOADER_APP_INVALID = -6,
+    BOOT_LOADER_ROLLBACK_ERROR = -7,
+} boot_loader_status_t;
 
-typedef struct {
-    uint8_t  rx_cache[BOOT_PACKET_MAX_SIZE];   // 线性解析缓存（整帧最大长度）
-    uint16_t rx_cache_len;
-    uint8_t  payload_buf[BOOT_PAYLOAD_MAX_SIZE];  // 纯数据缓存
+typedef struct
+{
+    void *context;
 
-    uint32_t current_addr;              //当前写入地址
-    uint8_t  stream_cache[4];           //写流缓存，保证4字节对齐写入
-    uint8_t  stream_cache_len;
+    /* BCB 接口使用相对 BCB 区域的偏移。 */
+    boot_loader_status_t (*bcb_read)(void *context,
+                                     uint32_t offset,
+                                     uint8_t *data,
+                                     uint32_t length);
+    boot_loader_status_t (*bcb_program)(void *context,
+                                        uint32_t offset,
+                                        const uint8_t *data,
+                                        uint32_t length);
+    boot_loader_status_t (*bcb_erase)(void *context,
+                                      uint32_t offset,
+                                      uint32_t length);
 
-    uint32_t boot_flag;
-    uint32_t app_version;
-    uint32_t update_date;
-    uint32_t out_flash_flag;
+    /* 外部存储接口使用相对所选槽的偏移。 */
+    boot_loader_status_t (*external_read)(void *context,
+                                          boot_slot_t slot,
+                                          uint32_t offset,
+                                          uint8_t *data,
+                                          uint32_t length);
+    boot_loader_status_t (*external_erase)(void *context,
+                                           boot_slot_t slot,
+                                           uint32_t offset,
+                                           uint32_t length);
+    boot_loader_status_t (*external_write)(void *context,
+                                           boot_slot_t slot,
+                                           uint32_t offset,
+                                           const uint8_t *data,
+                                           uint32_t length);
 
-    boot_state_t state;                 // 当前状态
-    bool download_active;
-    bool initialized;
-} bootloader_context_t;
+    /* APP 接口使用相对 APP 起始地址的偏移。 */
+    boot_loader_status_t (*app_erase)(void *context,
+                                      uint32_t offset,
+                                      uint32_t length);
+    boot_loader_status_t (*app_write)(void *context,
+                                      uint32_t offset,
+                                      const uint8_t *data,
+                                      uint32_t length);
+    boot_loader_status_t (*app_read)(void *context,
+                                     uint32_t offset,
+                                     uint8_t *data,
+                                     uint32_t length);
 
-extern bootloader_context_t g_boot_ctx;
+    void (*service_watchdog)(void *context);
+    void (*jump_to_app)(void *context, uint32_t app_address);
+    void (*log)(void *context, const char *format, ...);
+} boot_loader_ops_t;
 
-boot_port_status_t easy_bootloader_init(const boot_ops_t *ops);
+typedef struct
+{
+    uint32_t app_start_address;
+    uint32_t app_max_size;
+    uint32_t bcb_region_size;
+    uint32_t slot_a_size;
+    uint32_t slot_b_size;
+    uint32_t external_erase_size;
+    uint8_t max_boot_attempts;
+} boot_loader_config_t;
+
+typedef struct
+{
+    boot_control_status_t control;
+    boot_loader_status_t last_status;
+    uint8_t initialized;
+    uint8_t processed;
+} boot_loader_progress_t;
+
+void easy_bootloader_get_default_config(boot_loader_config_t *config);
+boot_loader_status_t easy_bootloader_init(const boot_loader_config_t *config,
+                                          const boot_loader_ops_t *ops);
 void easy_bootloader_run(void);
+void easy_bootloader_get_progress(boot_loader_progress_t *progress);
 
-#endif // EASY_BOOTLOADER_H
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* EASY_BOOTLOADER_H */

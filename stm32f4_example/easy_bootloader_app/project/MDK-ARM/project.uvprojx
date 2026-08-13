@@ -277,7 +277,7 @@
               <OCR_RVCT4>
                 <Type>1</Type>
                 <StartAddress>0x8010000</StartAddress>
-                <Size>0xd0000</Size>
+                <Size>0xf0000</Size>
               </OCR_RVCT4>
               <OCR_RVCT5>
                 <Type>1</Type>
@@ -661,16 +661,6 @@
               <FileType>5</FileType>
               <FilePath>..\Myapp\scheduler.h</FilePath>
             </File>
-            <File>
-              <FileName>ota_flash.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Myapp\ota_flash.c</FilePath>
-            </File>
-            <File>
-              <FileName>ota_flash.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Myapp\ota_flash.h</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>
@@ -705,6 +695,26 @@
               <FileName>easy_bootloader_app.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Compoents\easy_bootloader_app.h</FilePath>
+            </File>
+            <File>
+              <FileName>boot_image.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Compoents\boot_image.c</FilePath>
+            </File>
+            <File>
+              <FileName>boot_image.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Compoents\boot_image.h</FilePath>
+            </File>
+            <File>
+              <FileName>boot_control.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Compoents\boot_control.c</FilePath>
+            </File>
+            <File>
+              <FileName>boot_control.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Compoents\boot_control.h</FilePath>
             </File>
             <File>
               <FileName>W25QXX_driver.c</FileName>
