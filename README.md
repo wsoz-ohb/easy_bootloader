@@ -96,6 +96,13 @@
 
 ## 版本更新记录
 
+### v3.1 (2026-08-13)
+- **A/B 升级架构重构**：升级数据改由 APP 接收并写入外部 W25Q128 的非活动镜像槽；Bootloader 负责将候选镜像安装到唯一的内部 APP 执行区。
+- **BCB 启动控制**：新增内部 Flash 追加式 BCB 记录，维护确认槽、候选槽和试运行次数，支持断电后的状态恢复。
+- **试运行与回滚**：新镜像安装后进入 `TRIAL`；APP 健康检查确认前发生异常、镜像校验失败或连续复位超过 2 次时，自动恢复已确认版本。
+- **下载串口调整**：APP 升级口改为 USART3（`PD8=TX`、`PB11=RX`，115200），UART1 保留为日志/回显口。
+- **上位机与文档同步**：上位机升级流程适配 APP 下载模式，发布 `Easy_Bootloader_串口终端_v2.1.0.exe`，并补充 A/B、BCB 与回滚流程说明。
+
 ### v3.0 (2026-03-04)
 - **接口模式升级**：Boot 与 APP 统一切换为配置加 ops 注入模式：`easy_bootloader_init(const boot_loader_config_t *, const boot_loader_ops_t *)`、`easy_bootloader_app_init(const boot_app_config_t *, const boot_app_ops_t *)`。
 - **板级接口解耦**：核心通过 ops 集合调用 STM32F407 板级的 Flash、串口和系统接口。
